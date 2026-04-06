@@ -72,10 +72,19 @@
     <!-- OVERVIEW -->
     <div id="pane-overview">
       <div class="metrics" id="ov-metrics"></div>
+      <div class="bulk-bar" id="ov-bulk-bar">
+        <span class="count" id="ov-bulk-count">0개 선택</span>
+        <button class="btn-bulk danger" onclick="ovDeleteSelected()">선택 삭제</button>
+        <button class="btn-bulk" onclick="ovClearSel()" style="margin-left:auto">선택 해제</button>
+      </div>
       <div class="filters">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer">
+          <input type="checkbox" class="row-cb" id="ov-sel-all" onchange="ovToggleAll(this.checked)"> 전체 선택
+        </label>
         <input type="text" id="ov-s" placeholder="품목 검색..." style="max-width:200px" oninput="renderOverview()">
         <select id="ov-cat" onchange="renderOverview()"><option value="">전체 카테고리</option><option>RFID/스티커</option><option>뮤직박스</option><option>측정기/센서</option><option>포장재</option><option>기타</option></select>
         <select id="ov-st" onchange="renderOverview()"><option value="">전체 상태</option><option value="danger">발주필요</option><option value="warn">주의</option><option value="ok">정상</option></select>
+        <div style="margin-left:auto"><button class="btn btn-sm btn-danger" onclick="ovDeleteAll()">전체 삭제</button></div>
       </div>
       <div class="card" style="padding:0"><div class="tbl-wrap"><table><thead id="ov-head"></thead><tbody id="ov-body"></tbody></table></div></div>
     </div>
@@ -114,7 +123,14 @@
 
     <!-- HISTORY -->
     <div id="pane-history" style="display:none">
-      <div class="section-hd"><div class="section-title">실사 이력</div><div id="hist-cnt" class="text-muted text-sm"></div></div>
+      <div class="section-hd">
+        <div class="section-title">실사 이력</div>
+        <div id="hist-cnt" class="text-muted text-sm"></div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-sm btn-danger" id="hist-del-sel-btn" style="display:none" onclick="histDeleteSelected()">선택 삭제</button>
+          <button class="btn btn-sm btn-danger" onclick="histDeleteAll()">전체 삭제</button>
+        </div>
+      </div>
       <div id="hist-list"></div>
       <div id="hist-detail" style="display:none">
         <div style="font-size:14px;font-weight:700;margin:20px 0 12px;padding-top:16px;border-top:1px solid var(--border)" id="hist-detail-title"></div>
@@ -188,6 +204,21 @@ function switchTab(tab, el) {
 }
 
 // ─── OVERVIEW ────────────────────────────────────────────
+const ovSel = new Set();
+
+function ovVisibleRows() {
+  const q=document.getElementById('ov-s').value.toLowerCase(), cat=document.getElementById('ov-cat').value, st=document.getElementById('ov-st').value;
+  return products.filter(p=>{
+    if(q&&!p.name.toLowerCase().includes(q)) return false;
+    if(cat&&p.category!==cat) return false;
+    const s=totalStock(p);
+    if(st==='danger'&&s>10) return false;
+    if(st==='warn'&&(s<=10||s>20)) return false;
+    if(st==='ok'&&s<=20) return false;
+    return true;
+  });
+}
+
 function renderOverview() {
   const danger=products.filter(p=>totalStock(p)<=10), warn=products.filter(p=>totalStock(p)>10&&totalStock(p)<=20);
   const val=products.reduce((a,p)=>a+totalStock(p)*unitPrice(p),0);
@@ -197,20 +228,17 @@ function renderOverview() {
     <div class="metric"><div class="metric-label">주의 품목</div><div class="metric-value amber">${warn.length}</div><div class="metric-note">재고 20개 이하</div></div>
     <div class="metric"><div class="metric-label">총 재고금액</div><div class="metric-value" style="font-size:18px">${Math.round(val/10000).toLocaleString()}만원</div></div>
   `;
-  const q=document.getElementById('ov-s').value.toLowerCase(), cat=document.getElementById('ov-cat').value, st=document.getElementById('ov-st').value;
-  const rows=products.filter(p=>{
-    if(q&&!p.name.toLowerCase().includes(q)) return false;
-    if(cat&&p.category!==cat) return false;
-    const s=totalStock(p);
-    if(st==='danger'&&s>10) return false;
-    if(st==='warn'&&(s<=10||s>20)) return false;
-    if(st==='ok'&&s<=20) return false;
-    return true;
-  });
-  document.getElementById('ov-head').innerHTML = `<tr><th style="width:190px">품목명</th><th>카테고리</th><th>구분</th>${warehouses.map(w=>`<th class="right">${w.name}</th>`).join('')}<th class="right">합계</th><th class="right">개당 원가</th><th>상태</th><th class="right">수정</th></tr>`;
+  const rows = ovVisibleRows();
+  document.getElementById('ov-head').innerHTML = `<tr>
+    <th style="width:36px"><input type="checkbox" class="row-cb" id="ov-head-cb" onchange="ovToggleAll(this.checked,true)"></th>
+    <th style="width:170px">품목명</th><th>카테고리</th><th>구분</th>
+    ${warehouses.map(w=>`<th class="right">${w.name}</th>`).join('')}
+    <th class="right">합계</th><th class="right">개당 원가</th><th>상태</th><th class="right">수정/삭제</th>
+  </tr>`;
   document.getElementById('ov-body').innerHTML = rows.map(p=>{
     const s=totalStock(p), st=stockStatus(s);
-    return `<tr>
+    return `<tr style="${ovSel.has(p.id)?'background:var(--accent-bg)':''}">
+      <td><input type="checkbox" class="row-cb" data-id="${p.id}" onchange="ovOnCheck(${p.id},this.checked)" ${ovSel.has(p.id)?'checked':''}></td>
       <td class="fw-bold">${p.name}</td>
       <td><span class="badge badge-gray">${p.category}</span></td>
       <td><span class="badge ${p.type==='국내'?'badge-info':'badge-purple'}">${p.type}</span></td>
@@ -218,9 +246,48 @@ function renderOverview() {
       <td class="right mono fw-bold" style="color:${s<=10?'var(--red)':s<=20?'var(--amber)':'inherit'}">${s}</td>
       <td class="right mono text-sm">${unitPrice(p).toLocaleString()}</td>
       <td><span class="badge badge-${st}">${st==='danger'?'발주필요':st==='warn'?'주의':'정상'}</span></td>
-      <td class="right"><button class="btn btn-sm" onclick="editStock(${p.id})">수정</button></td>
+      <td class="right" style="display:flex;gap:4px;justify-content:flex-end">
+        <button class="btn btn-sm" onclick="editStock(${p.id})">수정</button>
+        <button class="btn btn-sm btn-danger" onclick="ovDelOne(${p.id})">삭제</button>
+      </td>
     </tr>`;
   }).join('');
+  ovSyncUI();
+}
+
+function ovOnCheck(id,checked){if(checked)ovSel.add(id);else ovSel.delete(id);ovSyncUI();}
+function ovToggleAll(checked,fromHead=false){
+  const rows=fromHead?ovVisibleRows():products;
+  rows.forEach(p=>{if(checked)ovSel.add(p.id);else ovSel.delete(p.id);});
+  renderOverview();
+}
+function ovClearSel(){ovSel.clear();renderOverview();}
+function ovSyncUI(){
+  const rows=ovVisibleRows();
+  const hcb=document.getElementById('ov-head-cb');if(hcb)hcb.checked=rows.length>0&&rows.every(p=>ovSel.has(p.id));
+  const sacb=document.getElementById('ov-sel-all');if(sacb)sacb.checked=products.length>0&&products.every(p=>ovSel.has(p.id));
+  const bar=document.getElementById('ov-bulk-bar'),cnt=document.getElementById('ov-bulk-count');
+  if(ovSel.size>0){bar.classList.add('show');cnt.textContent=`${ovSel.size}개 선택됨`;}
+  else bar.classList.remove('show');
+}
+async function ovDelOne(id){
+  if(!confirm('이 품목을 삭제하시겠습니까?'))return;
+  lb(true);await deleteProduct(id);lb(false);
+  products=products.filter(p=>p.id!==id);ovSel.delete(id);renderOverview();
+}
+async function ovDeleteSelected(){
+  if(!ovSel.size){showToast('선택된 항목이 없습니다','error');return;}
+  if(!confirm(`선택한 ${ovSel.size}개 품목을 삭제하시겠습니까?`))return;
+  lb(true);const ids=[...ovSel];
+  for(const id of ids){await deleteProduct(id);}
+  products=products.filter(p=>!ids.includes(p.id));ovSel.clear();lb(false);
+  showToast(`${ids.length}개 삭제 완료`);renderOverview();
+}
+async function ovDeleteAll(){
+  if(!products.length){showToast('삭제할 품목이 없습니다','error');return;}
+  if(!confirm(`전체 ${products.length}개 품목을 모두 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`))return;
+  lb(true);for(const p of [...products]){await deleteProduct(p.id);}
+  products=[];ovSel.clear();lb(false);showToast('전체 삭제 완료');renderOverview();
 }
 
 async function editStock(id) {
@@ -305,23 +372,55 @@ async function saveSession() {
 }
 
 // ─── HISTORY ─────────────────────────────────────────────
+const histSel = new Set();
+
 async function renderHistory() {
   sessions=await getSessions();
   document.getElementById('hist-cnt').textContent=`총 ${sessions.length}회`;
+  const selBtn=document.getElementById('hist-del-sel-btn');
+  if(selBtn) selBtn.style.display=histSel.size>0?'':\'none\';
   const list=document.getElementById('hist-list');
-  if(!sessions.length) { list.innerHTML='<div class="empty">저장된 실사 이력이 없습니다.</div>'; return; }
+  if(!sessions.length){list.innerHTML='<div class="empty">저장된 실사 이력이 없습니다.</div>';histSel.clear();return;}
   list.innerHTML=[...sessions].reverse().map(s=>{
     const diffs=Object.values(s._items||{}).filter(i=>i.actual_qty!==i.system_qty).length;
-    return `<div class="hist-row" onclick="showHistDetail(${s.id})">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
-        <div><span class="fw-bold">${s.date}</span>${s.memo?`<span class="text-muted text-sm" style="margin-left:10px">${s.memo}</span>`:''}</div>
-        <div style="display:flex;gap:12px;align-items:center">
-          <span class="text-muted text-sm">차이: <strong class="fw-bold" style="color:var(--text1)">${diffs||'?'}건</strong></span>
+    return `<div class="hist-row ${histSel.has(s.id)?'selected':''}" style="${histSel.has(s.id)?'border-color:var(--accent);background:var(--accent-bg)':''}">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <input type="checkbox" class="row-cb" onclick="event.stopPropagation()" onchange="histOnCheck(${s.id},this.checked)" ${histSel.has(s.id)?'checked':''}>
+        <div style="flex:1;cursor:pointer" onclick="showHistDetail(${s.id})">
+          <span class="fw-bold">${s.date}</span>${s.memo?`<span class="text-muted text-sm" style="margin-left:10px">${s.memo}</span>`:''}
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <span class="text-muted text-sm">차이: <strong>${diffs||'?'}건</strong></span>
           <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();delSession(${s.id})">삭제</button>
         </div>
       </div>
     </div>`;
   }).join('');
+}
+
+function histOnCheck(id,checked){
+  if(checked)histSel.add(id);else histSel.delete(id);
+  const btn=document.getElementById('hist-del-sel-btn');
+  if(btn)btn.style.display=histSel.size>0?'':\'none\';
+}
+
+async function histDeleteSelected(){
+  if(!histSel.size){showToast('선택된 항목이 없습니다','error');return;}
+  if(!confirm(`선택한 ${histSel.size}개 실사 이력을 삭제하시겠습니까?`))return;
+  lb(true);const ids=[...histSel];
+  for(const id of ids){await deleteSession(id);}
+  histSel.clear();lb(false);
+  document.getElementById('hist-detail').style.display='none';
+  showToast(`${ids.length}개 삭제 완료`);await renderHistory();
+}
+
+async function histDeleteAll(){
+  if(!sessions.length){showToast('삭제할 이력이 없습니다','error');return;}
+  if(!confirm(`실사 이력 전체 ${sessions.length}건을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`))return;
+  lb(true);for(const s of [...sessions]){await deleteSession(s.id);}
+  histSel.clear();lb(false);sessions=[];
+  document.getElementById('hist-detail').style.display='none';
+  showToast('전체 삭제 완료');await renderHistory();
 }
 
 async function showHistDetail(id) {

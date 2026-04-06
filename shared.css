@@ -224,6 +224,21 @@ hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
 
+/* ── Checkbox select ─────────────────────────────────────────── */
+.row-cb { width: 16px; height: 16px; border: 1.5px solid var(--border2); border-radius: 4px; cursor: pointer; appearance: none; -webkit-appearance: none; flex-shrink: 0; transition: all 0.15s; position: relative; background: var(--surface); }
+.row-cb:checked { background: var(--text1); border-color: var(--text1); }
+.row-cb:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 5px; height: 9px; border: 2px solid #fff; border-top: none; border-left: none; transform: rotate(40deg); }
+.row-cb:hover { border-color: var(--border-primary, var(--text1)); }
+tr:has(.row-cb:checked) td { background: var(--accent-bg) !important; }
+
+.bulk-bar { display: none; align-items: center; gap: 10px; padding: 10px 14px; background: var(--text1); border-radius: var(--radius); margin-bottom: 12px; color: #fff; font-size: 13px; }
+.bulk-bar.show { display: flex; }
+.bulk-bar .count { font-weight: 700; min-width: 60px; }
+.bulk-bar .btn-bulk { font-size: 12px; padding: 5px 12px; border-radius: 6px; cursor: pointer; border: 1px solid rgba(255,255,255,0.3); background: transparent; color: #fff; transition: all 0.15s; }
+.bulk-bar .btn-bulk:hover { background: rgba(255,255,255,0.15); }
+.bulk-bar .btn-bulk.danger { border-color: #FECACA; color: #FECACA; }
+.bulk-bar .btn-bulk.danger:hover { background: rgba(220,38,38,0.3); }
+
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .page-inner { padding: 20px 16px; }
