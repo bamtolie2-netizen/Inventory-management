@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>재고현황 — 재고&단가 관리</title>
+<link rel="stylesheet" href="shared.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase.js"></script>
+<style>
+.inp-qty { width:76px;font-family:var(--mono);font-size:12.5px;text-align:right;padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1);transition:all .15s; }
+.inp-qty:focus { outline:none;border-color:var(--accent); }
+.inp-ok  { background:#F0FDF4;border-color:#86EFAC; }
+.inp-neg { background:#FEF2F2;border-color:#FECACA; }
+.inp-pos { background:#F0FDF4;border-color:#86EFAC; }
+.sticky-bar { position:sticky;top:var(--top-h);z-index:200;background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:none;gap:14px;align-items:center;flex-wrap:wrap;box-shadow:0 2px 4px rgba(0,0,0,.04); }
+.sticky-bar.show { display:flex; }
+.sm { text-align:center; }
+.sm .v { font-size:18px;font-weight:700;font-family:var(--mono); }
+.sm .l { font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px; }
+.vdiv { width:1px;height:30px;background:var(--border); }
+.hist-row { border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:8px;cursor:pointer;transition:all .15s; }
+.hist-row:hover { border-color:var(--border2);background:var(--bg); }
+.wh-box { background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px; }
+.wh-hd { display:flex;align-items:center;justify-content:space-between;margin-bottom:10px; }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="index.html" class="logo">재고<em>&</em>단가</a>
+  <div class="nav-links">
+    <a href="index.html"     class="nav-link">대시보드</a>
+    <a href="price.html"     class="nav-link">단가표</a>
+    <a href="inventory.html" class="nav-link active">재고현황</a>
+    <a href="report.html"    class="nav-link">보고서</a>
+  </div>
+  <div class="topbar-right"><span id="clock"></span></div>
+</nav>
+
+<!-- Stocktake sticky bar -->
+<div class="sticky-bar" id="sticky-bar">
+  <div class="sm"><div class="v" id="sm-total">0</div><div class="l">전체</div></div>
+  <div class="vdiv"></div>
+  <div class="sm"><div class="v text-green" id="sm-done">0</div><div class="l">입력완료</div></div>
+  <div class="sm"><div class="v text-red" id="sm-diff">0</div><div class="l">차이발생</div></div>
+  <div style="flex:1;min-width:100px">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:3px"><span>진행률</span><span id="sm-pct">0%</span></div>
+    <div class="prog-bar"><div class="prog-fill" id="sm-prog" style="width:0%"></div></div>
+  </div>
+  <button class="btn btn-success" onclick="saveSession()">실사 저장</button>
+  <button class="btn btn-sm" onclick="fillSystem()">시스템값 채우기</button>
+  <button class="btn btn-sm btn-danger" onclick="clearActual()">초기화</button>
+</div>
+
+<div id="loading-bar"></div>
+<div class="toast" id="toast"></div>
+
+<div class="page">
+  <div class="page-inner">
+    <div class="page-title">재고현황</div>
+    <div class="page-sub">창고별 재고 조회 · 실사 입력 및 이력 · 기간별 증감 추이</div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('overview',this)">전체 현황</div>
+      <div class="tab" id="tab-stocktake" onclick="switchTab('stocktake',this)">실사 입력</div>
+      <div class="tab" onclick="switchTab('history',this)">실사 이력</div>
+      <div class="tab" onclick="switchTab('trend',this)">기간별 증감</div>
+      <div class="tab" onclick="switchTab('warehouse',this)">창고 관리</div>
+    </div>
+
+    <!-- OVERVIEW -->
+    <div id="pane-overview">
+      <div class="metrics" id="ov-metrics"></div>
+      <div class="filters">
+        <input type="text" id="ov-s" placeholder="품목 검색..." style="max-width:200px" oninput="renderOverview()">
+        <select id="ov-cat" onchange="renderOverview()"><option value="">전체 카테고리</option><option>RFID/스티커</option><option>뮤직박스</option><option>측정기/센서</option><option>포장재</option><option>기타</option></select>
+        <select id="ov-st" onchange="renderOverview()"><option value="">전체 상태</option><option value="danger">발주필요</option><option value="warn">주의</option><option value="ok">정상</option></select>
+      </div>
+      <div class="card" style="padding:0"><div class="tbl-wrap"><table><thead id="ov-head"></thead><tbody id="ov-body"></tbody></table></div></div>
+    </div>
+
+    <!-- STOCKTAKE -->
+    <div id="pane-stocktake" style="display:none">
+      <div class="card">
+        <div class="card-body" style="padding-bottom:12px">
+          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+            <div class="form-field" style="min-width:160px"><label>실사 날짜</label><input type="date" id="st-date"></div>
+            <div class="form-field" style="flex:1;min-width:200px"><label>메모</label><input type="text" id="st-memo" placeholder="예: 월말 재고 정리"></div>
+          </div>
+        </div>
+      </div>
+      <div class="filters">
+        <input type="text" id="st-s" placeholder="품목 검색..." style="max-width:200px" oninput="renderStocktake()">
+        <select id="st-cat" onchange="renderStocktake()"><option value="">전체 카테고리</option><option>RFID/스티커</option><option>뮤직박스</option><option>측정기/센서</option><option>포장재</option><option>기타</option></select>
+        <select id="st-f" onchange="renderStocktake()"><option value="">전체</option><option value="diff">차이 발생</option><option value="match">일치</option><option value="empty">미입력</option></select>
+      </div>
+      <div class="card" style="padding:0"><div class="tbl-wrap"><table>
+        <thead><tr>
+          <th style="width:190px">품목명</th><th style="width:80px">카테고리</th><th style="width:55px">구분</th>
+          <th class="right" style="width:85px">시스템 재고</th>
+          <th class="right" style="width:95px">실사 수량</th>
+          <th class="right" style="width:80px">차이</th>
+          <th class="right" style="width:115px">전회 대비</th>
+          <th style="width:80px">상태</th>
+        </tr></thead>
+        <tbody id="st-body"></tbody>
+      </table></div>
+      <div style="padding:10px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--text3)">
+        녹색 = 일치 · 빨간 테두리 = 부족 · 빈칸 = 미입력
+      </div>
+      </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div id="pane-history" style="display:none">
+      <div class="section-hd"><div class="section-title">실사 이력</div><div id="hist-cnt" class="text-muted text-sm"></div></div>
+      <div id="hist-list"></div>
+      <div id="hist-detail" style="display:none">
+        <div style="font-size:14px;font-weight:700;margin:20px 0 12px;padding-top:16px;border-top:1px solid var(--border)" id="hist-detail-title"></div>
+        <div class="card" style="padding:0"><div class="tbl-wrap"><table>
+          <thead><tr><th style="width:190px">품목명</th><th>카테고리</th><th class="right">시스템</th><th class="right">실사</th><th class="right">차이</th><th>판정</th></tr></thead>
+          <tbody id="hist-detail-body"></tbody>
+        </table></div></div>
+      </div>
+    </div>
+
+    <!-- TREND -->
+    <div id="pane-trend" style="display:none">
+      <div class="card">
+        <div class="card-body">
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <div class="card-title">기간별 증감 추이</div>
+            <select id="trend-prod" style="max-width:240px" onchange="renderTrend()"><option value="">전체 합산</option></select>
+          </div>
+        </div>
+      </div>
+      <div id="trend-table"></div>
+    </div>
+
+    <!-- WAREHOUSE -->
+    <div id="pane-warehouse" style="display:none">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-body">
+          <div class="card-title" style="margin-bottom:12px">창고 추가</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input type="text" id="wh-n" placeholder="창고명 (예: 본사 창고)" style="max-width:200px">
+            <input type="text" id="wh-m" placeholder="담당자" style="max-width:140px">
+            <button class="btn btn-primary" onclick="addWH()">추가</button>
+          </div>
+        </div>
+      </div>
+      <div id="wh-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function tick(){ document.getElementById('clock').textContent = new Date().toLocaleString('ko-KR',{month:'short',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'}); setTimeout(tick,30000); })();
+document.getElementById('st-date').value = new Date().toISOString().slice(0,10);
+
+let products=[], warehouses=[], sessions=[];
+let currentActual={};
+let activeTab='overview';
+
+function lb(on){ const b=document.getElementById('loading-bar'); if(on){b.style.width='60%';b.style.opacity='1';}else{b.style.width='100%';setTimeout(()=>{b.classList.add('done');setTimeout(()=>{b.style.width='0%';b.classList.remove('done');},300);},200);} }
+
+async function loadAll() {
+  lb(true);
+  [products, warehouses, sessions] = await Promise.all([getProductsWithPrices(), getWarehouses(), getSessions()]);
+  lb(false);
+}
+
+function switchTab(tab, el) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  ['overview','stocktake','history','trend','warehouse'].forEach(p=>{
+    document.getElementById('pane-'+p).style.display = p===tab?'block':'none';
+  });
+  document.getElementById('sticky-bar').classList.toggle('show', tab==='stocktake');
+  if(tab==='overview')   renderOverview();
+  if(tab==='stocktake')  renderStocktake();
+  if(tab==='history')    renderHistory();
+  if(tab==='trend')      renderTrend();
+  if(tab==='warehouse')  renderWarehouses();
+}
+
+// ─── OVERVIEW ────────────────────────────────────────────
+function renderOverview() {
+  const danger=products.filter(p=>totalStock(p)<=10), warn=products.filter(p=>totalStock(p)>10&&totalStock(p)<=20);
+  const val=products.reduce((a,p)=>a+totalStock(p)*unitPrice(p),0);
+  document.getElementById('ov-metrics').innerHTML = `
+    <div class="metric"><div class="metric-label">전체 품목</div><div class="metric-value">${products.length}</div></div>
+    <div class="metric"><div class="metric-label">발주 필요</div><div class="metric-value red">${danger.length}</div><div class="metric-note">재고 10개 이하</div></div>
+    <div class="metric"><div class="metric-label">주의 품목</div><div class="metric-value amber">${warn.length}</div><div class="metric-note">재고 20개 이하</div></div>
+    <div class="metric"><div class="metric-label">총 재고금액</div><div class="metric-value" style="font-size:18px">${Math.round(val/10000).toLocaleString()}만원</div></div>
+  `;
+  const q=document.getElementById('ov-s').value.toLowerCase(), cat=document.getElementById('ov-cat').value, st=document.getElementById('ov-st').value;
+  const rows=products.filter(p=>{
+    if(q&&!p.name.toLowerCase().includes(q)) return false;
+    if(cat&&p.category!==cat) return false;
+    const s=totalStock(p);
+    if(st==='danger'&&s>10) return false;
+    if(st==='warn'&&(s<=10||s>20)) return false;
+    if(st==='ok'&&s<=20) return false;
+    return true;
+  });
+  document.getElementById('ov-head').innerHTML = `<tr><th style="width:190px">품목명</th><th>카테고리</th><th>구분</th>${warehouses.map(w=>`<th class="right">${w.name}</th>`).join('')}<th class="right">합계</th><th class="right">개당 원가</th><th>상태</th><th class="right">수정</th></tr>`;
+  document.getElementById('ov-body').innerHTML = rows.map(p=>{
+    const s=totalStock(p), st=stockStatus(s);
+    return `<tr>
+      <td class="fw-bold">${p.name}</td>
+      <td><span class="badge badge-gray">${p.category}</span></td>
+      <td><span class="badge ${p.type==='국내'?'badge-info':'badge-purple'}">${p.type}</span></td>
+      ${warehouses.map(w=>`<td class="right mono" style="color:${(p.stock[w.id]||0)<=10?'var(--red)':(p.stock[w.id]||0)<=20?'var(--amber)':'inherit'}">${p.stock[w.id]||0}</td>`).join('')}
+      <td class="right mono fw-bold" style="color:${s<=10?'var(--red)':s<=20?'var(--amber)':'inherit'}">${s}</td>
+      <td class="right mono text-sm">${unitPrice(p).toLocaleString()}</td>
+      <td><span class="badge badge-${st}">${st==='danger'?'발주필요':st==='warn'?'주의':'정상'}</span></td>
+      <td class="right"><button class="btn btn-sm" onclick="editStock(${p.id})">수정</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function editStock(id) {
+  const p=products.find(x=>x.id===id); if(!p) return;
+  const cur=warehouses.map(w=>`${w.name}(${w.id}): ${p.stock[w.id]||0}`).join(', ');
+  const input=prompt(`[${p.name}] 재고 수정\n현재: ${cur}\n\n입력 형식: 창고ID=수량,창고ID=수량`, warehouses.map(w=>`${w.id}=${p.stock[w.id]||0}`).join(','));
+  if(!input) return;
+  const rows=[];
+  input.split(',').forEach(pair=>{
+    const [k,v]=pair.split('=').map(s=>s.trim());
+    const wid=parseInt(k), qty=parseInt(v);
+    if(!isNaN(wid)&&!isNaN(qty)) { p.stock[wid]=qty; rows.push({product_id:p.id,warehouse_id:wid,quantity:qty}); }
+  });
+  if(rows.length) { await updateStockBatch(rows); renderOverview(); }
+}
+
+// ─── STOCKTAKE ───────────────────────────────────────────
+function getLastActual(pid) {
+  if(!sessions.length) return null;
+  const last=sessions[sessions.length-1];
+  const item=last._items?.find(i=>i.product_id===pid);
+  return item ? item.actual_qty : null;
+}
+
+function renderStocktake() {
+  const q=document.getElementById('st-s').value.toLowerCase(), cat=document.getElementById('st-cat').value, f=document.getElementById('st-f').value;
+  const rows=products.filter(p=>{
+    if(q&&!p.name.toLowerCase().includes(q)) return false;
+    if(cat&&p.category!==cat) return false;
+    const act=currentActual[p.id], hasAct=act!==undefined, s=totalStock(p), diff=hasAct?act-s:null;
+    if(f==='diff'&&(!hasAct||diff===0)) return false;
+    if(f==='match'&&(!hasAct||diff!==0)) return false;
+    if(f==='empty'&&hasAct) return false;
+    return true;
+  });
+  document.getElementById('st-body').innerHTML = rows.map(p=>{
+    const s=totalStock(p), act=currentActual[p.id], hasAct=act!==undefined;
+    const diff=hasAct?act-s:null, lastAct=getLastActual(p.id);
+    const prevDiff=(hasAct&&lastAct!==null)?act-lastAct:null;
+    const st=hasAct?stockStatus(act):stockStatus(s);
+    let inputCls='inp-qty'+(hasAct?diff===0?' inp-ok':diff<0?' inp-neg':' inp-pos':'');
+    let diffCell=hasAct?(diff===0?'<span class="diff-zero">±0</span>':diff<0?`<span class="diff-neg">${diff}</span>`:`<span class="diff-pos">+${diff}</span>`):'<span class="text-muted">—</span>';
+    let prevCell=prevDiff!==null?(prevDiff===0?'<span class="trend-same">변동없음</span>':prevDiff>0?`<span class="trend-up">▲ +${prevDiff}</span>`:`<span class="trend-down">▼ ${prevDiff}</span>`):(lastAct!==null&&!hasAct?`<span class="trend-same text-sm">전회: ${lastAct}</span>`:'<span class="text-muted">—</span>');
+    return `<tr>
+      <td class="fw-bold">${p.name}</td>
+      <td><span class="badge badge-gray" style="font-size:10px">${p.category}</span></td>
+      <td><span class="badge ${p.type==='국내'?'badge-info':'badge-purple'}" style="font-size:10px">${p.type}</span></td>
+      <td class="right mono fw-bold">${s}</td>
+      <td class="right"><input class="${inputCls}" type="number" min="0" value="${hasAct?act:''}" placeholder="—" oninput="setAct(${p.id},this.value)"></td>
+      <td class="right">${diffCell}</td>
+      <td class="right">${prevCell}</td>
+      <td><span class="badge badge-${st}" style="font-size:10px">${st==='danger'?'발주필요':st==='warn'?'주의':'정상'}</span></td>
+    </tr>`;
+  }).join('');
+  updateStickyBar();
+}
+
+function setAct(id,val) { if(val===''||val===null) delete currentActual[id]; else currentActual[id]=Math.max(0,parseInt(val)||0); updateStickyBar(); }
+
+function updateStickyBar() {
+  const total=products.length, done=products.filter(p=>currentActual[p.id]!==undefined).length;
+  const diff=products.filter(p=>currentActual[p.id]!==undefined&&currentActual[p.id]!==totalStock(p)).length;
+  const pct=total?Math.round(done/total*100):0;
+  document.getElementById('sm-total').textContent=total;
+  document.getElementById('sm-done').textContent=done;
+  document.getElementById('sm-diff').textContent=diff;
+  document.getElementById('sm-pct').textContent=pct+'%';
+  document.getElementById('sm-prog').style.width=pct+'%';
+}
+
+function fillSystem() { products.forEach(p=>{currentActual[p.id]=totalStock(p);}); renderStocktake(); }
+function clearActual() { if(!confirm('초기화하시겠습니까?')) return; currentActual={}; renderStocktake(); }
+
+async function saveSession() {
+  const date=document.getElementById('st-date').value||new Date().toISOString().slice(0,10);
+  const memo=document.getElementById('st-memo').value.trim();
+  const items=products.map(p=>({ product_id:p.id, system_qty:totalStock(p), actual_qty:currentActual[p.id]!==undefined?currentActual[p.id]:totalStock(p) }));
+  lb(true);
+  const result=await saveStocktakeSession(date,memo,items);
+  lb(false);
+  if(result) { sessions=await getSessions(); currentActual={}; renderStocktake(); }
+}
+
+// ─── HISTORY ─────────────────────────────────────────────
+async function renderHistory() {
+  sessions=await getSessions();
+  document.getElementById('hist-cnt').textContent=`총 ${sessions.length}회`;
+  const list=document.getElementById('hist-list');
+  if(!sessions.length) { list.innerHTML='<div class="empty">저장된 실사 이력이 없습니다.</div>'; return; }
+  list.innerHTML=[...sessions].reverse().map(s=>{
+    const diffs=Object.values(s._items||{}).filter(i=>i.actual_qty!==i.system_qty).length;
+    return `<div class="hist-row" onclick="showHistDetail(${s.id})">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+        <div><span class="fw-bold">${s.date}</span>${s.memo?`<span class="text-muted text-sm" style="margin-left:10px">${s.memo}</span>`:''}</div>
+        <div style="display:flex;gap:12px;align-items:center">
+          <span class="text-muted text-sm">차이: <strong class="fw-bold" style="color:var(--text1)">${diffs||'?'}건</strong></span>
+          <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();delSession(${s.id})">삭제</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function showHistDetail(id) {
+  lb(true);
+  const items=await getSessionItems(id);
+  lb(false);
+  const s=sessions.find(x=>x.id===id);
+  document.getElementById('hist-detail-title').textContent=`${s?.date} 실사 상세${s?.memo?' — '+s.memo:''}`;
+  document.getElementById('hist-detail').style.display='block';
+  document.getElementById('hist-detail-body').innerHTML=items.map(i=>{
+    const diff=i.actual_qty-i.system_qty;
+    return `<tr>
+      <td class="fw-bold">${i.products?.name||i.product_id}</td>
+      <td><span class="badge badge-gray text-sm">${i.products?.category||'—'}</span></td>
+      <td class="right mono">${i.system_qty}</td>
+      <td class="right mono fw-bold">${i.actual_qty}</td>
+      <td class="right">${diff===0?'<span class="diff-zero">±0</span>':diff>0?`<span class="diff-pos">+${diff}</span>`:`<span class="diff-neg">${diff}</span>`}</td>
+      <td><span class="badge ${diff===0?'badge-ok':diff<0?'badge-danger':'badge-warn'}">${diff===0?'일치':diff<0?'부족':'초과'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+async function delSession(id) {
+  if(!confirm('이 실사 이력을 삭제하시겠습니까?')) return;
+  await deleteSession(id); document.getElementById('hist-detail').style.display='none';
+  await renderHistory();
+}
+
+// ─── TREND ───────────────────────────────────────────────
+async function renderTrend() {
+  sessions=await getSessions();
+  const sel=document.getElementById('trend-prod');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">전체 합산</option>'+products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  sel.value=cur;
+  const cont=document.getElementById('trend-table');
+  if(sessions.length<2){cont.innerHTML='<div class="card"><div class="card-body"><div class="empty">비교할 실사 이력이 2회 이상 필요합니다.</div></div></div>';return;}
+  // Load all session items
+  lb(true);
+  for(const s of sessions){if(!s._items){s._items=await getSessionItems(s.id);}}
+  lb(false);
+  const pid=sel.value;
+  let html='<div class="card" style="padding:0"><div class="tbl-wrap"><table><thead><tr>';
+  if(pid){
+    html+='<th style="width:120px">날짜</th><th>메모</th><th class="right">실사 수량</th><th class="right">전회 대비</th></tr></thead><tbody>';
+    let prev=null;
+    sessions.forEach(s=>{
+      const item=s._items?.find(i=>i.product_id===parseInt(pid));
+      const act=item?.actual_qty??null;
+      let chg=prev!==null&&act!==null?(act-prev===0?'<span class="trend-same">변동없음</span>':act-prev>0?`<span class="trend-up">▲ +${act-prev}</span>`:`<span class="trend-down">▼ ${act-prev}</span>`):'<span class="text-muted text-sm">기준</span>';
+      html+=`<tr><td class="fw-bold">${s.date}</td><td class="text-muted text-sm">${s.memo||'—'}</td><td class="right mono fw-bold">${act??'—'}</td><td class="right">${chg}</td></tr>`;
+      if(act!==null) prev=act;
+    });
+  } else {
+    html+='<th style="width:120px">날짜</th><th>메모</th><th class="right">합산 실사</th><th class="right">시스템 대비</th><th class="right">전회 대비</th></tr></thead><tbody>';
+    let prevTotal=null;
+    sessions.forEach(s=>{
+      const vals=s._items||[];
+      const totalAct=vals.reduce((a,i)=>a+i.actual_qty,0), totalSys=vals.reduce((a,i)=>a+i.system_qty,0);
+      const sysDiff=totalAct-totalSys;
+      let chg=prevTotal!==null?(totalAct-prevTotal===0?'<span class="trend-same">변동없음</span>':totalAct-prevTotal>0?`<span class="trend-up">▲ +${totalAct-prevTotal}</span>`:`<span class="trend-down">▼ ${totalAct-prevTotal}</span>`):'<span class="text-muted text-sm">기준</span>';
+      html+=`<tr><td class="fw-bold">${s.date}</td><td class="text-muted text-sm">${s.memo||'—'}</td><td class="right mono fw-bold">${totalAct.toLocaleString()}</td><td class="right">${sysDiff===0?'<span class="diff-zero">±0</span>':sysDiff>0?`<span class="diff-pos">+${sysDiff}</span>`:`<span class="diff-neg">${sysDiff}</span>`}</td><td class="right">${chg}</td></tr>`;
+      prevTotal=totalAct;
+    });
+  }
+  html+='</tbody></table></div></div>';
+  cont.innerHTML=html;
+}
+
+// ─── WAREHOUSE ────────────────────────────────────────────
+function renderWarehouses() {
+  const el=document.getElementById('wh-list');
+  el.innerHTML=warehouses.map(w=>{
+    const items=products.map(p=>`<tr><td class="text-sm fw-bold">${p.name}</td><td class="right mono">${p.stock[w.id]||0}</td><td class="right mono text-sm text-muted">${((p.stock[w.id]||0)*unitPrice(p)).toLocaleString()}원</td></tr>`).join('');
+    const total=products.reduce((a,p)=>a+(p.stock[w.id]||0),0);
+    const val=products.reduce((a,p)=>a+(p.stock[w.id]||0)*unitPrice(p),0);
+    return `<div class="wh-box">
+      <div class="wh-hd">
+        <div><span class="fw-bold">${w.name}</span>${w.manager?`<span class="text-muted text-sm" style="margin-left:8px">담당: ${w.manager}</span>`:''}</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="text-muted text-sm">총 ${total.toLocaleString()}개 · ${Math.round(val/10000).toFixed(1)}만원</span>
+          ${warehouses.length>1?`<button class="btn btn-sm btn-danger" onclick="delWH(${w.id})">삭제</button>`:''}
+        </div>
+      </div>
+      <div class="tbl-wrap"><table><thead><tr><th style="width:200px">품목</th><th class="right">수량</th><th class="right">재고금액</th></tr></thead><tbody>${items}</tbody></table></div>
+    </div>`;
+  }).join('');
+}
+
+async function addWH() {
+  const name=document.getElementById('wh-n').value.trim(); if(!name){showToast('창고명 입력','error');return;}
+  const mgr=document.getElementById('wh-m').value.trim();
+  lb(true); const result=await addWarehouse(name,mgr); lb(false);
+  if(result){document.getElementById('wh-n').value='';document.getElementById('wh-m').value='';warehouses=await getWarehouses();renderWarehouses();}
+}
+
+async function delWH(id) {
+  if(warehouses.length<=1){showToast('최소 1개 필요','error');return;}
+  if(!confirm('이 창고를 삭제하시겠습니까?')) return;
+  lb(true); await deleteWarehouse(id); warehouses=await getWarehouses(); lb(false);
+  renderWarehouses();
+}
+
+// Init
+loadAll().then(() => renderOverview());
+if(location.hash==='#stocktake') switchTab('stocktake',document.getElementById('tab-stocktake'));
+</script>
+</body>
+</html>

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>보고서 — 재고&단가 관리</title>
+<link rel="stylesheet" href="shared.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase.js"></script>
+<style>
+.report-area { width:100%;font-family:var(--mono);font-size:13px;line-height:1.8;min-height:220px;padding:14px 16px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text1);resize:vertical; }
+.report-area:focus { border-color:var(--accent);background:var(--surface); }
+.ch-row { display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg);border-radius:var(--radius);margin-bottom:6px; }
+.ch-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+.ch-lbl { font-weight:600;font-size:13px;width:110px;flex-shrink:0; }
+.ch-inp { font-family:var(--mono);text-align:right;width:70px; }
+.copy-flash { animation: flashBtn 0.4s ease; }
+@keyframes flashBtn { 0%,100%{transform:scale(1)} 50%{transform:scale(0.95)} }
+.chk-item { display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border); }
+.chk-item:last-child { border-bottom:none; }
+.chk { width:18px;height:18px;border:1.5px solid var(--border2);border-radius:4px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:all .15s; }
+.chk.done { background:var(--text1);border-color:var(--text1); }
+.chk.done::after { content:'✓';color:#fff;font-size:11px;font-weight:700; }
+.chk-text { font-size:13px;line-height:1.4; }
+.chk-text.done { color:var(--text3);text-decoration:line-through; }
+.chk-meta { font-size:11px;color:var(--text3);margin-top:1px; }
+.prog-ring { width:52px;height:52px;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center; }
+.prog-ring svg { position:absolute;top:0;left:0;transform:rotate(-90deg); }
+.prog-ring-val { position:relative;z-index:1;font-size:11px;font-weight:700;font-family:var(--mono); }
+.stat-row { display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border); }
+.stat-row:last-child { border-bottom:none; }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="index.html" class="logo">재고<em>&</em>단가</a>
+  <div class="nav-links">
+    <a href="index.html"     class="nav-link">대시보드</a>
+    <a href="price.html"     class="nav-link">단가표</a>
+    <a href="inventory.html" class="nav-link">재고현황</a>
+    <a href="report.html"    class="nav-link active">보고서</a>
+  </div>
+  <div class="topbar-right"><span id="clock"></span></div>
+</nav>
+
+<div id="loading-bar"></div>
+<div class="toast" id="toast"></div>
+
+<div class="page">
+  <div class="page-inner">
+    <div class="page-title">보고서 작성</div>
+    <div class="page-sub">출근·퇴근 판매 보고서 · 발주 보고 · 일일 루틴 체크</div>
+
+    <div style="display:grid;grid-template-columns:1fr 330px;gap:16px;align-items:start">
+
+      <!-- Left: reports -->
+      <div>
+        <div class="tabs">
+          <div class="tab active" onclick="switchRep('morning',this)">출근 보고</div>
+          <div class="tab" onclick="switchRep('evening',this)">퇴근 보고</div>
+          <div class="tab" onclick="switchRep('order',this)">발주 보고</div>
+        </div>
+
+        <!-- Morning -->
+        <div id="rep-morning">
+          <div class="card"><div class="card-body">
+            <div class="card-hd">
+              <div><div class="card-title">출근 후 판매 보고</div><div class="card-sub" id="rep-d-m"></div></div>
+              <div style="display:flex;gap:8px">
+                <button class="btn" onclick="genReport('morning')">자동 생성</button>
+                <button class="btn" id="cp-m" onclick="copyRep('morning','cp-m')">복사</button>
+              </div>
+            </div>
+            <div style="margin-bottom:12px">
+              <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">채널별 신규 주문 수량</div>
+              <div id="ch-m"></div>
+              <button class="btn btn-sm btn-success" style="margin-top:6px" onclick="saveOrders('m')">주문 수량 저장</button>
+            </div>
+            <textarea class="report-area" id="rep-txt-m"></textarea>
+          </div></div>
+        </div>
+
+        <!-- Evening -->
+        <div id="rep-evening" style="display:none">
+          <div class="card"><div class="card-body">
+            <div class="card-hd">
+              <div><div class="card-title">퇴근 전 판매 보고</div><div class="card-sub" id="rep-d-e"></div></div>
+              <div style="display:flex;gap:8px">
+                <button class="btn" onclick="genReport('evening')">자동 생성</button>
+                <button class="btn" id="cp-e" onclick="copyRep('evening','cp-e')">복사</button>
+              </div>
+            </div>
+            <div style="margin-bottom:12px">
+              <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">채널별 처리 완료 수량</div>
+              <div id="ch-e"></div>
+              <button class="btn btn-sm btn-success" style="margin-top:6px" onclick="saveOrders('e')">처리 수량 저장</button>
+            </div>
+            <textarea class="report-area" id="rep-txt-e"></textarea>
+          </div></div>
+        </div>
+
+        <!-- Order -->
+        <div id="rep-order" style="display:none">
+          <div class="card"><div class="card-body">
+            <div class="card-hd">
+              <div><div class="card-title">발주 보고서</div><div class="card-sub">재고 10개 이하 품목 자동 수집</div></div>
+              <div style="display:flex;gap:8px">
+                <button class="btn" onclick="genOrderReport()">자동 생성</button>
+                <button class="btn" id="cp-o" onclick="copyRep('order','cp-o')">복사</button>
+              </div>
+            </div>
+            <div style="display:flex;gap:16px;padding:12px 16px;background:var(--bg);border-radius:var(--radius);margin-bottom:12px;flex-wrap:wrap;font-size:13px">
+              <div style="display:flex;align-items:center;gap:7px"><div style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></div>국내/포장재 → <strong>임은화 부장님</strong></div>
+              <div style="display:flex;align-items:center;gap:7px"><div style="width:8px;height:8px;border-radius:50%;background:#7C3AED"></div>국제 제품 → <strong>임남호 전무님</strong></div>
+            </div>
+            <div id="order-alerts" style="margin-bottom:12px"></div>
+            <textarea class="report-area" id="rep-txt-o"></textarea>
+          </div></div>
+        </div>
+      </div>
+
+      <!-- Right: routine + stats -->
+      <div>
+        <div class="card">
+          <div class="card-body">
+            <div class="card-hd">
+              <div class="card-title">일일 루틴</div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <div class="prog-ring">
+                  <svg width="52" height="52" viewBox="0 0 52 52">
+                    <circle cx="26" cy="26" r="22" fill="none" stroke="var(--bg2)" stroke-width="4"/>
+                    <circle cx="26" cy="26" r="22" fill="none" stroke="var(--accent)" stroke-width="4"
+                      stroke-dasharray="138.2" id="prog-circle" stroke-dashoffset="138.2" stroke-linecap="round"/>
+                  </svg>
+                  <span class="prog-ring-val" id="prog-val">0%</span>
+                </div>
+                <span id="prog-txt" style="font-size:12px;color:var(--text3)">0/0</span>
+              </div>
+            </div>
+
+            <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">출근</div>
+            <div id="rt-morning"></div>
+            <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">수시</div>
+            <div id="rt-always"></div>
+            <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">퇴근</div>
+            <div id="rt-evening"></div>
+            <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+              <button class="btn btn-sm" onclick="resetRt()">체크 초기화</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title" style="margin-bottom:12px">오늘 현황</div>
+            <div id="quick-stats"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function tick(){ document.getElementById('clock').textContent=new Date().toLocaleString('ko-KR',{month:'short',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'}); setTimeout(tick,30000); })();
+
+const NOW=new Date(), TODAY=NOW.toISOString().slice(0,10);
+const DS=NOW.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
+const TS=NOW.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+document.getElementById('rep-d-m').textContent=DS+' 출근';
+document.getElementById('rep-d-e').textContent=DS+' 퇴근';
+
+function lb(on){ const b=document.getElementById('loading-bar'); if(on){b.style.width='60%';b.style.opacity='1';}else{b.style.width='100%';setTimeout(()=>{b.classList.add('done');setTimeout(()=>{b.style.width='0%';b.classList.remove('done');},300);},200);} }
+
+let products=[], sessions=[];
+let chOrders={ m:{}, e:{} }; // { m: {naver:32,...}, e: {naver:28,...} }
+
+function switchRep(tab,el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); el.classList.add('active');
+  ['morning','evening','order'].forEach(r=>{ document.getElementById('rep-'+r).style.display=r===tab?'block':'none'; });
+  if(tab==='order') genOrderReport();
+}
+
+async function loadData() {
+  lb(true);
+  [products,,sessions] = await Promise.all([getProductsWithPrices(), getWarehouses(), getSessions()]);
+  // Load today's orders
+  const orders = await getDailyOrders(TODAY);
+  orders.forEach(o => {
+    if(o.ordered)   chOrders.m[o.channel] = o.ordered;
+    if(o.processed) chOrders.e[o.channel] = o.processed;
+  });
+  lb(false);
+  renderChannelInputs();
+  renderQuickStats();
+}
+
+function renderChannelInputs() {
+  ['m','e'].forEach(sfx => {
+    const lbl = sfx==='m' ? '신규 주문' : '처리 완료';
+    document.getElementById('ch-'+sfx).innerHTML = CHANNELS.map(ch=>`
+      <div class="ch-row">
+        <div class="ch-dot" style="background:${ch.color}"></div>
+        <div class="ch-lbl">${ch.label}</div>
+        <input class="inp ch-inp" type="number" min="0" value="${chOrders[sfx][ch.key]||''}" placeholder="0"
+          oninput="chOrders['${sfx}']['${ch.key}']=parseInt(this.value)||0">
+        <span style="font-size:12px;color:var(--text3);margin-left:4px">${lbl}</span>
+      </div>`).join('');
+  });
+}
+
+async function saveOrders(sfx) {
+  lb(true);
+  for(const ch of CHANNELS) {
+    const ordered    = sfx==='m' ? (chOrders.m[ch.key]||0) : undefined;
+    const processed  = sfx==='e' ? (chOrders.e[ch.key]||0) : undefined;
+    if(ordered!==undefined || processed!==undefined) {
+      await upsertDailyOrder(TODAY, ch.key, ordered??chOrders.m[ch.key]??0, processed??chOrders.e[ch.key]??0);
+    }
+  }
+  lb(false);
+  showToast('저장됨');
+}
+
+function genReport(type) {
+  const danger=products.filter(p=>totalStock(p)<=10);
+  const dText=danger.length?danger.map(p=>`  · ${p.name}: ${totalStock(p)}개 (${p.type==='국내'?'임은화 부장':'임남호 전무'})`).join('\n'):'  · 발주 필요 없음';
+  const lastSess=sessions.length?sessions[sessions.length-1].date:'없음';
+  if(type==='morning'){
+    const total=Object.values(chOrders.m).reduce((a,v)=>a+v,0);
+    const lines=CHANNELS.filter(c=>chOrders.m[c.key]).map(c=>`  · ${c.label}: ${chOrders.m[c.key]}건`).join('\n');
+    document.getElementById('rep-txt-m').value=
+`[${DS} 출근 보고] ${TS}
+
+안녕하세요. 업무 시작 보고드립니다.
+
+📦 전일 주문 현황 (총 ${total}건)
+${lines||'  · 채널별 수량을 위에서 입력 후 저장해주세요'}
+
+📊 재고 현황
+  · 전체 품목: ${products.length}개
+  · 발주필요(10개↓): ${danger.length}건
+${dText}
+  · 마지막 실사: ${lastSess}
+
+💬 문의 현황
+  · 채널톡: 확인 중
+  · 카카오비즈니스: 확인 중
+
+감사합니다.`;
+  } else {
+    const total=Object.values(chOrders.e).reduce((a,v)=>a+v,0);
+    const lines=CHANNELS.filter(c=>chOrders.e[c.key]).map(c=>`  · ${c.label}: ${chOrders.e[c.key]}건`).join('\n');
+    document.getElementById('rep-txt-e').value=
+`[${DS} 퇴근 보고] ${TS}
+
+오늘 업무 마감 보고드립니다.
+
+✅ 처리 현황 (총 ${total}건)
+${lines||'  · 채널별 수량을 위에서 입력 후 저장해주세요'}
+
+📊 재고 최종 점검
+  · 발주필요(10개↓): ${danger.length}건
+${dText}
+
+내일도 잘 부탁드립니다.`;
+  }
+}
+
+async function genOrderReport() {
+  const danger=products.filter(p=>totalStock(p)<=10), warn=products.filter(p=>totalStock(p)>10&&totalStock(p)<=20);
+  const alertEl=document.getElementById('order-alerts');
+  alertEl.innerHTML=[
+    ...danger.map(p=>`<div class="alert-item alert-danger"><div class="alert-title">${p.name} — 재고 ${totalStock(p)}개</div><div class="alert-sub">${p.type} · ${p.type==='국내'?'임은화 부장님':'임남호 전무님'} · 즉시 발주</div></div>`),
+    ...warn.map(p=>`<div class="alert-item alert-warn"><div class="alert-title">${p.name} — 재고 ${totalStock(p)}개</div><div class="alert-sub">${p.type} · 발주 준비 권장</div></div>`)
+  ].join('') || '<div class="empty" style="padding:16px">발주 필요 품목 없음 ✓</div>';
+
+  const domestic=danger.filter(p=>p.type==='국내'), intl=danger.filter(p=>p.type==='국제');
+  document.getElementById('rep-txt-o').value=
+`[${DS} 발주 보고] ${TS}
+
+발주 필요 품목 보고드립니다.
+
+${domestic.length?`[임은화 부장님 — 국내/포장재]\n${domestic.map(p=>`  · ${p.name}: 현재 ${totalStock(p)}개`).join('\n')}\n\n`:''}${intl.length?`[임남호 전무님 — 국제 제품]\n${intl.map(p=>`  · ${p.name}: 현재 ${totalStock(p)}개`).join('\n')}\n\n`:''}${warn.length?`[발주 준비 권장]\n${warn.map(p=>`  · ${p.name}: 현재 ${totalStock(p)}개`).join('\n')}\n\n`:''}확인 부탁드립니다. 감사합니다.`;
+}
+
+function copyRep(tab, btnId) {
+  const map={morning:'rep-txt-m',evening:'rep-txt-e',order:'rep-txt-o'};
+  const txt=document.getElementById(map[tab])?.value||'';
+  if(!txt){showToast('먼저 보고서를 생성하세요','error');return;}
+  navigator.clipboard.writeText(txt).then(()=>{
+    const btn=document.getElementById(btnId);
+    const orig=btn.textContent; btn.textContent='복사됨!'; btn.classList.add('copy-flash');
+    setTimeout(()=>{btn.textContent=orig;btn.classList.remove('copy-flash');},1800);
+  }).catch(()=>showToast('복사 실패','error'));
+}
+
+// Routine
+const ROUTINES=[
+  {id:0,text:'네이버 스마트스토어 신규 발주 확인',tag:'morning'},
+  {id:1,text:'쿠팡 신규 발주 확인',tag:'morning'},
+  {id:2,text:'G마켓/옥션 (ESM+) 신규 발주 확인',tag:'morning'},
+  {id:3,text:'11번가 신규 발주 확인',tag:'morning'},
+  {id:4,text:'카페24 / Toss 신규 발주 확인',tag:'morning'},
+  {id:5,text:'출근 보고서 작성 및 발송',tag:'morning'},
+  {id:6,text:'채널톡 문의사항 확인',tag:'always'},
+  {id:7,text:'카카오비즈니스 센터 문의 확인',tag:'always'},
+  {id:8,text:'재고 현황 업데이트',tag:'always'},
+  {id:9,text:'발주 필요 품목 최종 점검',tag:'evening'},
+  {id:10,text:'퇴근 보고서 작성 및 발송',tag:'evening'},
+  {id:11,text:'미답변 문의 처리 확인',tag:'evening'},
+];
+const RT_KEY='inv_rt_'+NOW.toDateString();
+let rtDone=JSON.parse(localStorage.getItem(RT_KEY)||'[]');
+
+function renderRoutine() {
+  const total=ROUTINES.length, done=rtDone.length, pct=Math.round(done/total*100);
+  const circumference=2*Math.PI*22; // r=22
+  document.getElementById('prog-circle').style.strokeDashoffset=circumference*(1-pct/100);
+  document.getElementById('prog-val').textContent=pct+'%';
+  document.getElementById('prog-txt').textContent=`${done}/${total}`;
+  ['morning','always','evening'].forEach(tag=>{
+    document.getElementById('rt-'+tag).innerHTML=ROUTINES.filter(r=>r.tag===tag).map(r=>{
+      const done=rtDone.includes(r.id);
+      return `<div class="chk-item">
+        <div class="chk ${done?'done':''}" onclick="toggleRt(${r.id})"></div>
+        <div><div class="chk-text ${done?'done':''}">${r.text}</div></div>
+      </div>`;
+    }).join('');
+  });
+}
+function toggleRt(id) {
+  rtDone=rtDone.includes(id)?rtDone.filter(x=>x!==id):[...rtDone,id];
+  localStorage.setItem(RT_KEY,JSON.stringify(rtDone)); renderRoutine();
+}
+function resetRt() { if(!confirm('오늘 루틴을 초기화하시겠습니까?')) return; rtDone=[]; localStorage.setItem(RT_KEY,JSON.stringify(rtDone)); renderRoutine(); }
+
+function renderQuickStats() {
+  const danger=products.filter(p=>totalStock(p)<=10).length;
+  const warn=products.filter(p=>totalStock(p)>10&&totalStock(p)<=20).length;
+  const lastSess=sessions.length?sessions[sessions.length-1].date:'없음';
+  document.getElementById('quick-stats').innerHTML=`
+    <div class="stat-row"><span class="text-muted">발주 필요</span><span class="fw-bold" style="color:${danger>0?'var(--red)':'var(--green)'}">${danger}건</span></div>
+    <div class="stat-row"><span class="text-muted">주의 품목</span><span class="fw-bold" style="color:${warn>0?'var(--amber)':'var(--green)'}">${warn}건</span></div>
+    <div class="stat-row"><span class="text-muted">전체 품목</span><span class="fw-bold">${products.length}개</span></div>
+    <div class="stat-row"><span class="text-muted">마지막 실사</span><span class="fw-bold">${lastSess}</span></div>
+    <div style="margin-top:10px"><a href="inventory.html#stocktake" class="btn" style="width:100%;text-align:center;display:block">재고 실사 시작 →</a></div>
+  `;
+}
+
+loadData();
+renderRoutine();
+</script>
+</body>
+</html>

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>대시보드 — 재고&단가 관리</title>
+<link rel="stylesheet" href="shared.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase.js"></script>
+<style>
+.quick-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+@media(max-width:800px){ .quick-grid { grid-template-columns: repeat(2,1fr); } }
+.quick-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 20px; transition: all 0.2s; display: flex; flex-direction: column; gap: 8px;
+  box-shadow: var(--shadow); cursor: pointer;
+}
+.quick-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.09); border-color: var(--border2); }
+.quick-icon { font-size: 22px; }
+.quick-title { font-size: 14px; font-weight: 700; }
+.quick-sub   { font-size: 12px; color: var(--text3); }
+.ch-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.ch-row:last-child { border-bottom: none; }
+.ch-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ch-label { font-size: 13px; font-weight: 500; width: 110px; flex-shrink: 0; }
+.routine-item { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.routine-item:last-child { border-bottom: none; }
+.chk { width: 18px; height: 18px; border: 1.5px solid var(--border2); border-radius: 4px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-top: 1px; transition: all 0.15s; }
+.chk.done { background: var(--text1); border-color: var(--text1); }
+.chk.done::after { content: '✓'; color: #fff; font-size: 11px; font-weight: 700; }
+.chk-text { font-size: 13px; line-height: 1.4; }
+.chk-text.done { color: var(--text3); text-decoration: line-through; }
+.chk-meta { font-size: 11px; color: var(--text3); margin-top: 1px; }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="index.html" class="logo">재고<em>&</em>단가</a>
+  <div class="nav-links">
+    <a href="index.html"     class="nav-link active">대시보드</a>
+    <a href="price.html"     class="nav-link">단가표</a>
+    <a href="inventory.html" class="nav-link">재고현황</a>
+    <a href="report.html"    class="nav-link">보고서</a>
+  </div>
+  <div class="topbar-right">
+    <span id="clock"></span>
+    <a href="report.html" class="btn btn-primary btn-sm">보고서 작성</a>
+  </div>
+</nav>
+
+<div id="loading-bar"></div>
+<div class="toast" id="toast"></div>
+
+<div class="page">
+  <div class="page-inner">
+
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:22px">
+      <div>
+        <div class="page-title" id="today-str"></div>
+        <div class="page-sub">재고&단가 관리 시스템</div>
+      </div>
+    </div>
+
+    <div class="metrics" id="metrics">
+      <div class="metric"><div class="metric-label">전체 품목</div><div class="metric-value skeleton" style="height:32px;width:60px"></div></div>
+      <div class="metric"><div class="metric-label">발주 필요</div><div class="metric-value skeleton" style="height:32px;width:40px"></div></div>
+      <div class="metric"><div class="metric-label">주의 품목</div><div class="metric-value skeleton" style="height:32px;width:40px"></div></div>
+      <div class="metric"><div class="metric-label">총 재고금액</div><div class="metric-value skeleton" style="height:32px;width:80px"></div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div class="card">
+          <div class="card-body">
+            <div class="card-hd">
+              <div><div class="card-title">발주 필요 품목</div><div class="card-sub">재고 10개 이하</div></div>
+              <a href="inventory.html" class="btn btn-sm">재고 보기</a>
+            </div>
+            <div id="alert-list"><div class="skeleton" style="height:60px;margin-bottom:8px"></div><div class="skeleton" style="height:60px"></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title" style="margin-bottom:14px">빠른 이동</div>
+            <div class="quick-grid">
+              <a href="price.html" class="quick-card"><div class="quick-icon">💰</div><div class="quick-title">단가표</div><div class="quick-sub">원가 및 채널별 단가</div></a>
+              <a href="inventory.html" class="quick-card"><div class="quick-icon">📦</div><div class="quick-title">재고현황</div><div class="quick-sub">실사 및 증감 관리</div></a>
+              <a href="report.html" class="quick-card"><div class="quick-icon">📋</div><div class="quick-title">보고서</div><div class="quick-sub">출근/퇴근 보고서</div></a>
+              <a href="inventory.html#stocktake" class="quick-card"><div class="quick-icon">🔍</div><div class="quick-title">재고 실사</div><div class="quick-sub">실사 수량 입력</div></a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="card-body">
+            <div class="card-hd">
+              <div><div class="card-title">채널별 오늘 주문</div><div class="card-sub" id="today-orders-date"></div></div>
+              <a href="report.html" class="btn btn-sm">수량 입력</a>
+            </div>
+            <div id="ch-list"><div class="skeleton" style="height:180px"></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <div class="card-hd">
+              <div class="card-title">일일 루틴</div>
+              <div id="routine-prog" style="font-size:12px;color:var(--text3)">0/8</div>
+            </div>
+            <div id="routine-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Clock
+(function tick(){
+  document.getElementById('clock').textContent =
+    new Date().toLocaleString('ko-KR',{month:'short',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});
+  setTimeout(tick, 30000);
+})();
+
+document.getElementById('today-str').textContent =
+  new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+
+const TODAY = new Date().toISOString().slice(0,10);
+document.getElementById('today-orders-date').textContent = TODAY + ' 기준';
+
+// Loading bar
+function loadingStart() {
+  const b = document.getElementById('loading-bar');
+  b.style.width = '60%'; b.style.opacity = '1';
+}
+function loadingEnd() {
+  const b = document.getElementById('loading-bar');
+  b.style.width = '100%';
+  setTimeout(() => { b.classList.add('done'); setTimeout(() => { b.style.width='0%'; b.classList.remove('done'); }, 300); }, 200);
+}
+
+// Render metrics + alerts
+async function renderDash() {
+  loadingStart();
+  const products = await getProductsWithPrices();
+  loadingEnd();
+
+  const danger = products.filter(p => totalStock(p) <= 10);
+  const warn   = products.filter(p => totalStock(p) > 10 && totalStock(p) <= 20);
+  const val    = products.reduce((a,p) => a + totalStock(p) * unitPrice(p), 0);
+
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric"><div class="metric-label">전체 품목</div><div class="metric-value">${products.length}</div><div class="metric-note">등록 제품</div></div>
+    <div class="metric"><div class="metric-label">발주 필요</div><div class="metric-value red">${danger.length}</div><div class="metric-note">재고 10개 이하</div></div>
+    <div class="metric"><div class="metric-label">주의 품목</div><div class="metric-value amber">${warn.length}</div><div class="metric-note">재고 20개 이하</div></div>
+    <div class="metric"><div class="metric-label">총 재고금액</div><div class="metric-value" style="font-size:18px">${Math.round(val/10000).toLocaleString()}만원</div><div class="metric-note">원가 기준</div></div>
+  `;
+
+  const alertEl = document.getElementById('alert-list');
+  alertEl.innerHTML = danger.length === 0
+    ? '<div class="empty" style="padding:20px">발주 필요 품목 없음 ✓</div>'
+    : danger.map(p => {
+        const contact = p.type === '국내' ? '임은화 부장님' : '임남호 전무님';
+        return `<div class="alert-item alert-danger">
+          <div class="alert-title">${p.name} — 재고 ${totalStock(p)}개</div>
+          <div class="alert-sub">${p.type} · ${contact}께 발주 필요</div>
+        </div>`;
+      }).join('') + (warn.length ? `<div style="margin-top:6px;font-size:12px;color:var(--text3)">+ 주의 품목 ${warn.length}건</div>` : '');
+}
+
+// Channel orders
+async function renderChannelOrders() {
+  const orders = await getDailyOrders(TODAY);
+  const oMap = {};
+  orders.forEach(o => { oMap[o.channel] = o; });
+
+  document.getElementById('ch-list').innerHTML = CHANNELS.map(ch => {
+    const o = oMap[ch.key];
+    const ordered   = o?.ordered   || 0;
+    const processed = o?.processed || 0;
+    const pct = ordered ? Math.round(processed/ordered*100) : 0;
+    return `<div class="ch-row">
+      <div class="ch-dot" style="background:${ch.color}"></div>
+      <div class="ch-label">${ch.label}</div>
+      <div style="flex:1">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:3px">
+          <span>${ordered ? processed+'/'+ordered+'건' : '미입력'}</span>
+          <span>${ordered ? pct+'%' : ''}</span>
+        </div>
+        <div class="prog-bar">
+          <div class="prog-fill" style="width:${pct}%;background:${pct>=100?'var(--green)':pct>=70?'var(--amber)':'var(--red)'}"></div>
+        </div>
+      </div>
+      <span class="badge ${pct>=100?'badge-ok':pct>=70?'badge-warn':ordered?'badge-danger':'badge-gray'}" style="margin-left:8px">
+        ${pct>=100?'완료':pct>=70?'처리중':ordered?'확인필요':'대기'}
+      </span>
+    </div>`;
+  }).join('');
+}
+
+// Routine
+const ROUTINES = [
+  {id:0,text:'6개 채널 로그인 및 신규 발주 확인',meta:'출근'},
+  {id:1,text:'출근 보고서 작성 및 발송',meta:'출근'},
+  {id:2,text:'채널톡 문의사항 확인',meta:'수시'},
+  {id:3,text:'카카오비즈니스 센터 문의 확인',meta:'수시'},
+  {id:4,text:'재고 현황 업데이트',meta:'수시'},
+  {id:5,text:'발주 필요 품목 최종 점검',meta:'퇴근'},
+  {id:6,text:'퇴근 보고서 작성 및 발송',meta:'퇴근'},
+  {id:7,text:'미답변 문의 처리 확인',meta:'퇴근'},
+];
+const RT_KEY = 'inv_rt_' + new Date().toDateString();
+let rtDone = JSON.parse(localStorage.getItem(RT_KEY)||'[]');
+
+function renderRoutine() {
+  document.getElementById('routine-list').innerHTML = ROUTINES.map(r => {
+    const done = rtDone.includes(r.id);
+    return `<div class="routine-item">
+      <div class="chk ${done?'done':''}" onclick="toggleRt(${r.id})"></div>
+      <div>
+        <div class="chk-text ${done?'done':''}">${r.text}</div>
+        <div class="chk-meta">${r.meta}</div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('routine-prog').textContent = `${rtDone.length}/${ROUTINES.length} 완료`;
+}
+function toggleRt(id) {
+  rtDone = rtDone.includes(id) ? rtDone.filter(x=>x!==id) : [...rtDone, id];
+  localStorage.setItem(RT_KEY, JSON.stringify(rtDone));
+  renderRoutine();
+}
+
+renderDash();
+renderChannelOrders();
+renderRoutine();
+</script>
+</body>
+</html>

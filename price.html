@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>단가표 — 재고&단가 관리</title>
+<link rel="stylesheet" href="shared.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase.js"></script>
+<style>
+.ch-pill { display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;padding:5px 12px;border-radius:20px;cursor:pointer;border:1.5px solid transparent;transition:all .15s;white-space:nowrap; }
+.ch-pill.active { border-color: currentColor; font-weight:700; }
+.price-inp { width:90px;font-family:var(--mono);font-size:12px;text-align:right;padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text1); }
+.price-inp:focus { outline:none;border-color:var(--accent);background:var(--surface); }
+.margin-ok  { color:var(--green); font-weight:600; font-size:12px; }
+.margin-low { color:var(--amber); font-weight:600; font-size:12px; }
+.margin-neg { color:var(--red);   font-weight:600; font-size:12px; }
+.calc-box { background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px; }
+.calc-row { display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap; }
+.calc-lbl { font-size:12px;font-weight:600;color:var(--text3);min-width:80px; }
+.calc-result { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-top:8px; }
+.calc-val { font-family:var(--mono);font-size:22px;font-weight:700; }
+.calc-sub { font-size:12px;color:var(--text3);margin-top:3px; }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="index.html" class="logo">재고<em>&</em>단가</a>
+  <div class="nav-links">
+    <a href="index.html"     class="nav-link">대시보드</a>
+    <a href="price.html"     class="nav-link active">단가표</a>
+    <a href="inventory.html" class="nav-link">재고현황</a>
+    <a href="report.html"    class="nav-link">보고서</a>
+  </div>
+  <div class="topbar-right"><span id="clock"></span></div>
+</nav>
+
+<div id="loading-bar"></div>
+<div class="toast" id="toast"></div>
+
+<div class="page">
+  <div class="page-inner">
+    <div class="page-title">단가표</div>
+    <div class="page-sub">원가 및 채널별 판매단가 관리 · 마진율 자동 계산</div>
+
+    <div style="display:grid;grid-template-columns:1fr 330px;gap:16px;align-items:start">
+
+      <!-- Left -->
+      <div>
+        <div class="card">
+          <div class="card-body" style="padding-bottom:14px">
+            <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">채널 선택</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap" id="ch-pills">
+              <span class="ch-pill active" data-ch="cost" style="color:var(--text1);background:var(--bg2)" onclick="setChannel('cost',this)">원가 (단가표)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="filters">
+          <input type="text" id="srch" placeholder="품목 검색..." style="max-width:200px" oninput="renderTable()">
+          <select id="cat-f" onchange="renderTable()">
+            <option value="">전체 카테고리</option>
+            <option>RFID/스티커</option><option>뮤직박스</option>
+            <option>측정기/센서</option><option>포장재</option><option>기타</option>
+          </select>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn btn-sm" id="edit-btn" onclick="toggleEdit()" style="display:none">단가 편집</button>
+            <button class="btn btn-sm btn-primary" id="save-btn" style="display:none" onclick="savePrices()">저장</button>
+          </div>
+        </div>
+
+        <div class="card" style="padding:0" id="price-card">
+          <div class="tbl-wrap"><table>
+            <thead id="tbl-head"></thead>
+            <tbody id="tbl-body"><tr><td colspan="6" style="padding:30px;text-align:center"><div class="skeleton" style="height:20px;margin-bottom:8px"></div><div class="skeleton" style="height:20px;margin-bottom:8px"></div><div class="skeleton" style="height:20px"></div></td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- Right -->
+      <div>
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title" style="margin-bottom:14px">단위 변환 계산기</div>
+            <div class="calc-box">
+              <div class="calc-row">
+                <span class="calc-lbl">패키지 단가</span>
+                <input type="number" id="uc-t" placeholder="예: 970" style="max-width:110px" oninput="calcUnit()">
+                <span style="font-size:13px;color:var(--text3)">원</span>
+              </div>
+              <div class="calc-row">
+                <span class="calc-lbl">묶음 수량</span>
+                <input type="number" id="uc-c" placeholder="예: 6" style="max-width:110px" oninput="calcUnit()">
+                <span style="font-size:13px;color:var(--text3)">개</span>
+              </div>
+              <div class="calc-result" id="uc-box">
+                <div style="font-size:11px;color:var(--text3);margin-bottom:4px">개당 단가</div>
+                <div class="calc-val" id="uc-val">—</div>
+                <div class="calc-sub" id="uc-sub"></div>
+              </div>
+            </div>
+
+            <hr>
+            <div class="card-title" style="margin-bottom:12px">마진 계산</div>
+            <div class="calc-box">
+              <div class="calc-row">
+                <span class="calc-lbl">원가 (개당)</span>
+                <input type="number" id="mg-c" placeholder="예: 170" style="max-width:110px" oninput="calcMargin()">
+                <span style="font-size:13px;color:var(--text3)">원</span>
+              </div>
+              <div class="calc-row">
+                <span class="calc-lbl">판매가</span>
+                <input type="number" id="mg-s" placeholder="예: 250" style="max-width:110px" oninput="calcMargin()">
+                <span style="font-size:13px;color:var(--text3)">원</span>
+              </div>
+              <div class="calc-result" id="mg-box" style="display:none">
+                <div style="display:flex;gap:20px">
+                  <div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">마진</div><div class="calc-val" id="mg-profit" style="font-size:18px">—</div></div>
+                  <div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">마진율</div><div class="calc-val" id="mg-rate" style="font-size:18px">—</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add product -->
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title" style="margin-bottom:14px">신규 품목 등록</div>
+            <div class="form-grid" style="margin-bottom:10px">
+              <div class="form-field"><label>품목명</label><input type="text" id="s-name" placeholder="품목명"></div>
+            </div>
+            <div class="form-grid cols2" style="margin-bottom:10px">
+              <div class="form-field"><label>카테고리</label>
+                <select id="s-cat"><option>RFID/스티커</option><option>뮤직박스</option><option>측정기/센서</option><option>포장재</option><option>기타</option></select>
+              </div>
+              <div class="form-field"><label>구분</label>
+                <select id="s-type"><option>국내</option><option>국제</option></select>
+              </div>
+              <div class="form-field"><label>원가 (패키지)</label><input type="number" id="s-cost" placeholder="0"></div>
+              <div class="form-field"><label>단위 (1=단일)</label><input type="number" id="s-unit" placeholder="1" value="1"></div>
+            </div>
+            <button class="btn btn-primary" id="add-btn" onclick="addProduct()" style="width:100%">품목 등록</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function tick(){ document.getElementById('clock').textContent = new Date().toLocaleString('ko-KR',{month:'short',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'}); setTimeout(tick,30000); })();
+
+let products = [];
+let currentCh = 'cost';
+let editMode = false;
+let pendingPrices = {}; // { productId: { channel: price } }
+
+function lb(on){ const b=document.getElementById('loading-bar'); if(on){b.style.width='60%';b.style.opacity='1';}else{b.style.width='100%';setTimeout(()=>{b.classList.add('done');setTimeout(()=>{b.style.width='0%';b.classList.remove('done');},300);},200);} }
+
+// Build channel pills
+CHANNELS.forEach(ch => {
+  const el = document.createElement('span');
+  el.className = 'ch-pill';
+  el.dataset.ch = ch.key;
+  el.style.color = ch.color;
+  el.style.background = ch.color + '18';
+  el.innerHTML = `<span style="width:6px;height:6px;border-radius:50%;background:${ch.color};display:inline-block"></span>${ch.label}`;
+  el.onclick = () => setChannel(ch.key, el);
+  document.getElementById('ch-pills').appendChild(el);
+});
+
+function setChannel(key, el) {
+  currentCh = key;
+  document.querySelectorAll('.ch-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  const editBtn = document.getElementById('edit-btn');
+  editBtn.style.display = key !== 'cost' ? '' : 'none';
+  if (key === 'cost') { editMode = false; document.getElementById('save-btn').style.display='none'; }
+  renderTable();
+}
+
+async function loadProducts() {
+  lb(true);
+  products = await getProductsWithPrices();
+  lb(false);
+  renderTable();
+}
+
+function renderTable() {
+  const q   = document.getElementById('srch').value.toLowerCase();
+  const cat = document.getElementById('cat-f').value;
+  const rows = products.filter(p => (!q || p.name.toLowerCase().includes(q)) && (!cat || p.category === cat));
+
+  if (currentCh === 'cost') {
+    document.getElementById('tbl-head').innerHTML = `<tr>
+      <th style="width:190px">품목명</th><th>카테고리</th><th>구분</th>
+      <th class="right">패키지 원가</th><th>단위</th><th class="right">개당 원가</th><th class="right">삭제</th>
+    </tr>`;
+    document.getElementById('tbl-body').innerHTML = rows.map(p => `<tr>
+      <td class="fw-bold">${p.name}</td>
+      <td><span class="badge badge-gray">${p.category}</span></td>
+      <td><span class="badge ${p.type==='국내'?'badge-info':'badge-purple'}">${p.type}</span></td>
+      <td class="right mono">${p.cost.toLocaleString()}원</td>
+      <td class="text-muted text-sm">${p.unit>1?`묶음 ${p.unit}개`:'단일'}</td>
+      <td class="right mono fw-bold">${unitPrice(p).toLocaleString()}원${p.unit>1?`<div class="text-muted text-sm">${p.cost}÷${p.unit}</div>`:''}</td>
+      <td class="right"><button class="btn btn-sm btn-danger" onclick="delProduct(${p.id})">삭제</button></td>
+    </tr>`).join('');
+  } else {
+    const ch = CHANNELS.find(c => c.key === currentCh);
+    document.getElementById('tbl-head').innerHTML = `<tr>
+      <th style="width:190px">품목명</th><th>카테고리</th>
+      <th class="right">개당 원가</th>
+      <th class="right">${ch.label} 판매가</th>
+      <th class="right">마진</th><th class="right">마진율</th>
+    </tr>`;
+    document.getElementById('tbl-body').innerHTML = rows.map(p => {
+      const uc   = unitPrice(p);
+      const sell = editMode
+        ? (pendingPrices[p.id]?.[currentCh] ?? (p.prices?.[currentCh] || 0))
+        : (p.prices?.[currentCh] || 0);
+      const margin = sell ? sell - uc : null;
+      const rate   = sell ? Math.round((sell-uc)/sell*100) : null;
+      const cls    = margin===null?'':rate>=20?'margin-ok':rate>=5?'margin-low':'margin-neg';
+      const sellCell = editMode
+        ? `<input class="price-inp" type="number" value="${sell||''}" placeholder="0"
+             oninput="setPending(${p.id},'${currentCh}',this.value)">`
+        : (sell ? `<span class="mono">${sell.toLocaleString()}원</span>` : '<span class="text-muted text-sm">미등록</span>');
+      return `<tr>
+        <td class="fw-bold">${p.name}</td>
+        <td><span class="badge badge-gray">${p.category}</span></td>
+        <td class="right mono">${uc.toLocaleString()}원</td>
+        <td class="right">${sellCell}</td>
+        <td class="right ${cls}">${margin!==null?(margin>=0?'+':'')+margin.toLocaleString()+'원':'—'}</td>
+        <td class="right ${cls}">${rate!==null?rate+'%':'—'}</td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+function setPending(pid, ch, val) {
+  if (!pendingPrices[pid]) pendingPrices[pid] = {};
+  pendingPrices[pid][ch] = parseInt(val)||0;
+}
+
+function toggleEdit() {
+  editMode = !editMode;
+  pendingPrices = {};
+  document.getElementById('edit-btn').textContent = editMode ? '취소' : '단가 편집';
+  document.getElementById('save-btn').style.display = editMode ? '' : 'none';
+  renderTable();
+}
+
+async function savePrices() {
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true; btn.textContent = '저장 중...';
+  for (const [pid, chMap] of Object.entries(pendingPrices)) {
+    await saveAllChannelPrices(parseInt(pid), chMap);
+    const p = products.find(x=>x.id===parseInt(pid));
+    if (p) { if (!p.prices) p.prices={}; Object.assign(p.prices, chMap); }
+  }
+  pendingPrices = {};
+  editMode = false;
+  document.getElementById('edit-btn').textContent = '단가 편집';
+  btn.disabled = false; btn.textContent = '저장'; btn.style.display = 'none';
+  renderTable();
+}
+
+function calcUnit() {
+  const t = parseFloat(document.getElementById('uc-t').value)||0;
+  const c = parseFloat(document.getElementById('uc-c').value)||0;
+  if (t&&c) {
+    const per = Math.round(t/c);
+    document.getElementById('uc-val').textContent = per.toLocaleString()+'원';
+    document.getElementById('uc-sub').textContent = `${t.toLocaleString()}원 ÷ ${c}개 = ${per.toLocaleString()}원/개`;
+  } else { document.getElementById('uc-val').textContent='—'; document.getElementById('uc-sub').textContent=''; }
+}
+
+function calcMargin() {
+  const c = parseFloat(document.getElementById('mg-c').value)||0;
+  const s = parseFloat(document.getElementById('mg-s').value)||0;
+  const box = document.getElementById('mg-box');
+  if (c&&s) {
+    box.style.display='';
+    const profit=s-c, rate=Math.round(profit/s*100);
+    const pEl=document.getElementById('mg-profit'), rEl=document.getElementById('mg-rate');
+    pEl.textContent=(profit>=0?'+':'')+profit.toLocaleString()+'원';
+    pEl.className='calc-val '+(profit>=0?'text-green':'text-red');
+    rEl.textContent=rate+'%';
+    rEl.className='calc-val '+(rate>=20?'text-green':rate>=5?'text-amber':'text-red');
+  } else box.style.display='none';
+}
+
+async function addProduct() {
+  const name = document.getElementById('s-name').value.trim();
+  if (!name) { showToast('품목명을 입력하세요','error'); return; }
+  const btn = document.getElementById('add-btn');
+  btn.disabled=true; btn.textContent='등록 중...';
+  const result = await addProduct({
+    name,
+    category: document.getElementById('s-cat').value,
+    type:     document.getElementById('s-type').value,
+    cost:     parseInt(document.getElementById('s-cost').value)||0,
+    unit:     parseInt(document.getElementById('s-unit').value)||1,
+  });
+  btn.disabled=false; btn.textContent='품목 등록';
+  if (result) {
+    document.getElementById('s-name').value='';
+    document.getElementById('s-cost').value='';
+    document.getElementById('s-unit').value='1';
+    await loadProducts();
+  }
+}
+
+async function delProduct(id) {
+  if (!confirm('이 품목을 삭제하시겠습니까?')) return;
+  await deleteProduct(id);
+  await loadProducts();
+}
+
+loadProducts();
+</script>
+</body>
+</html>
