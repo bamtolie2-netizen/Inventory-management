@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>엑셀 관리 — 재고&단가 관리</title>
+<link rel="stylesheet" href="shared.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase.js"></script>
+<!-- SheetJS -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+.excel-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media(max-width:800px){ .excel-grid { grid-template-columns:1fr; } }
+
+/* 다운로드 카드 */
+.dl-card {
+  border:1px solid var(--border); border-radius:var(--radius-lg);
+  background:var(--surface); padding:20px 22px; margin-bottom:12px;
+  transition:all .15s;
+}
+.dl-card:hover { border-color:var(--border2); box-shadow:0 2px 8px rgba(0,0,0,.06); }
+.dl-card-hd { display:flex; align-items:flex-start; gap:14px; margin-bottom:12px; }
+.dl-icon { width:42px; height:42px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+.dl-title { font-size:14px; font-weight:700; margin-bottom:3px; }
+.dl-desc  { font-size:12px; color:var(--text3); line-height:1.5; }
+.dl-cols  { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:12px; }
+.dl-col   { font-size:11px; padding:2px 8px; border-radius:20px; background:var(--bg2); color:var(--text2); border:1px solid var(--border); font-family:var(--mono); }
+
+/* 업로드 드롭존 */
+.dropzone {
+  border:2px dashed var(--border2); border-radius:var(--radius-lg);
+  padding:32px 20px; text-align:center; cursor:pointer;
+  transition:all .2s; background:var(--bg);
+}
+.dropzone:hover, .dropzone.drag { border-color:var(--accent); background:var(--accent-bg); }
+.dropzone-icon { font-size:36px; margin-bottom:10px; opacity:.5; }
+.dropzone-title { font-size:14px; font-weight:600; color:var(--text2); margin-bottom:4px; }
+.dropzone-sub   { font-size:12.5px; color:var(--text3); }
+
+/* 업로드 미리보기 */
+.preview-table-wrap { overflow-x:auto; max-height:320px; border:1px solid var(--border); border-radius:var(--radius); }
+.preview-table { font-size:12px; }
+.preview-table thead th { position:sticky; top:0; background:var(--bg); z-index:10; }
+.row-new  { background:#F0FDF4 !important; }
+.row-upd  { background:#FFFBEB !important; }
+.row-err  { background:#FEF2F2 !important; }
+.row-badge { font-size:10px; padding:1px 6px; border-radius:20px; font-weight:600; }
+.rb-new { background:#BBF7D0; color:#14532D; }
+.rb-upd { background:#FDE68A; color:#78350F; }
+.rb-err { background:#FECACA; color:#7F1D1D; }
+
+/* 진행바 */
+.upload-progress { margin-top:12px; display:none; }
+.upload-progress.show { display:block; }
+.progress-text { font-size:12.5px; color:var(--text2); margin-bottom:6px; display:flex; justify-content:space-between; }
+
+/* 결과 요약 */
+.result-summary { display:flex; gap:12px; flex-wrap:wrap; margin-top:12px; }
+.result-chip { font-size:13px; font-weight:600; padding:6px 14px; border-radius:20px; }
+.rc-ok  { background:var(--green-bg);  color:var(--green);  border:1px solid var(--green-bd); }
+.rc-upd { background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber-bd); }
+.rc-err { background:var(--red-bg);   color:var(--red);   border:1px solid var(--red-bd); }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="index.html" class="logo">재고<em>&</em>단가</a>
+  <div class="nav-links">
+    <a href="index.html"     class="nav-link">대시보드</a>
+    <a href="price.html"     class="nav-link">단가표</a>
+    <a href="inventory.html" class="nav-link">재고현황</a>
+    <a href="sales.html"     class="nav-link">판매관리</a>
+    <a href="notes.html"     class="nav-link">제품특이사항</a>
+    <a href="report.html"    class="nav-link">보고서</a>
+    <a href="settings.html"  class="nav-link">설정</a>
+    <a href="excel.html"     class="nav-link active">엑셀</a>
+  </div>
+  <div class="topbar-right"><span id="clock"></span></div>
+</nav>
+<script>(function(){var cur=location.pathname.split('/').pop()||'index.html';document.querySelectorAll('.nav-link').forEach(function(a){if(a.getAttribute('href')===cur)a.classList.add('active');else a.classList.remove('active');});})();</script>
+
+<div id="loading-bar"></div>
+<div class="toast" id="toast"></div>
+
+<div class="page"><div class="page-inner">
+  <div class="page-title">엑셀 관리</div>
+  <div class="page-sub">품목·재고·단가 데이터를 엑셀로 다운로드하거나 엑셀 파일로 일괄 업로드</div>
+
+  <div class="excel-grid">
+
+    <!-- ═══ 왼쪽: 다운로드 ═══ -->
+    <div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:14px">다운로드</div>
+
+      <!-- 품목 전체 -->
+      <div class="dl-card">
+        <div class="dl-card-hd">
+          <div class="dl-icon" style="background:#EFF6FF">📦</div>
+          <div>
+            <div class="dl-title">품목 전체 (단가 + 재고 + 위치)</div>
+            <div class="dl-desc">모든 품목의 원가, 채널별 단가, 창고별 재고, 위치 정보를 한 시트에 다운로드</div>
+          </div>
+        </div>
+        <div class="dl-cols">
+          <span class="dl-col">품목명</span><span class="dl-col">카테고리</span><span class="dl-col">구분</span>
+          <span class="dl-col">원가</span><span class="dl-col">단위</span><span class="dl-col">개당원가</span>
+          <span class="dl-col">위치</span><span class="dl-col">총재고</span>
+          <span class="dl-col">네이버</span><span class="dl-col">쿠팡</span><span class="dl-col">G마켓/옥션</span>
+          <span class="dl-col">11번가</span><span class="dl-col">카페24</span><span class="dl-col">Toss</span><span class="dl-col">이지판매</span>
+        </div>
+        <button class="btn btn-primary" onclick="downloadProducts()">엑셀 다운로드</button>
+      </div>
+
+      <!-- 재고 현황 -->
+      <div class="dl-card">
+        <div class="dl-card-hd">
+          <div class="dl-icon" style="background:#F0FDF4">📊</div>
+          <div>
+            <div class="dl-title">재고 현황</div>
+            <div class="dl-desc">창고별 현재 재고 수량, 발주 필요 여부 포함</div>
+          </div>
+        </div>
+        <div class="dl-cols">
+          <span class="dl-col">품목명</span><span class="dl-col">카테고리</span>
+          <span class="dl-col">위치</span><span class="dl-col">창고별 수량</span>
+          <span class="dl-col">합계</span><span class="dl-col">상태</span>
+        </div>
+        <button class="btn btn-primary" onclick="downloadStock()">엑셀 다운로드</button>
+      </div>
+
+      <!-- 판매 이력 -->
+      <div class="dl-card">
+        <div class="dl-card-hd">
+          <div class="dl-icon" style="background:#FFF7ED">🛒</div>
+          <div>
+            <div class="dl-title">판매 이력</div>
+            <div class="dl-desc">날짜 범위를 선택해서 판매 기록 다운로드</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+          <input type="date" id="dl-from" style="font-size:12.5px;padding:6px 10px">
+          <span style="color:var(--text3)">~</span>
+          <input type="date" id="dl-to" style="font-size:12.5px;padding:6px 10px">
+        </div>
+        <div class="dl-cols">
+          <span class="dl-col">날짜</span><span class="dl-col">채널</span>
+          <span class="dl-col">구매자</span><span class="dl-col">품목</span>
+          <span class="dl-col">수량</span><span class="dl-col">비고</span><span class="dl-col">구분</span>
+        </div>
+        <button class="btn btn-primary" onclick="downloadSales()">엑셀 다운로드</button>
+      </div>
+
+      <!-- 업로드 템플릿 -->
+      <div class="dl-card">
+        <div class="dl-card-hd">
+          <div class="dl-icon" style="background:#F5F3FF">📋</div>
+          <div>
+            <div class="dl-title">업로드 템플릿 다운로드</div>
+            <div class="dl-desc">품목 등록용 / 재고 수정용 빈 양식</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" onclick="downloadTemplate('product')">품목 등록 양식</button>
+          <button class="btn" onclick="downloadTemplate('stock')">재고 수정 양식</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 오른쪽: 업로드 ═══ -->
+    <div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:14px">업로드</div>
+
+      <!-- 업로드 타입 선택 -->
+      <div class="tabs" style="margin-bottom:14px">
+        <div class="tab active" onclick="switchUploadTab('product',this)">품목 등록/수정</div>
+        <div class="tab" onclick="switchUploadTab('stock',this)">재고 수량 수정</div>
+      </div>
+
+      <!-- 업로드 안내 -->
+      <div id="upload-guide" style="padding:12px 16px;background:var(--bg);border-radius:var(--radius);margin-bottom:12px;font-size:12.5px;color:var(--text2);line-height:1.7"></div>
+
+      <!-- 드롭존 -->
+      <div class="dropzone" id="dropzone"
+        onclick="document.getElementById('file-input').click()"
+        ondragover="event.preventDefault();this.classList.add('drag')"
+        ondragleave="this.classList.remove('drag')"
+        ondrop="onDrop(event)">
+        <div class="dropzone-icon">📂</div>
+        <div class="dropzone-title">클릭 또는 드래그로 엑셀 파일 업로드</div>
+        <div class="dropzone-sub">.xlsx, .xls, .csv 파일 지원</div>
+      </div>
+      <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="onFileSelect(event)">
+
+      <!-- 미리보기 -->
+      <div id="preview-area" style="display:none;margin-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+          <div style="font-size:13px;font-weight:600" id="preview-title"></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" onclick="clearUpload()">취소</button>
+            <button class="btn btn-sm btn-primary" id="upload-btn" onclick="doUpload()">DB에 저장</button>
+          </div>
+        </div>
+        <div class="result-summary" id="preview-summary"></div>
+        <div class="preview-table-wrap" style="margin-top:10px">
+          <table class="preview-table"><thead id="preview-head"></thead><tbody id="preview-body"></tbody></table>
+        </div>
+
+        <!-- 진행 -->
+        <div class="upload-progress" id="upload-progress">
+          <div class="progress-text"><span id="prog-text">저장 중...</span><span id="prog-pct">0%</span></div>
+          <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<script>
+(function tick(){document.getElementById('clock').textContent=new Date().toLocaleString('ko-KR',{month:'short',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});setTimeout(tick,30000);})();
+
+// 오늘 날짜 기본값
+const TODAY = new Date().toISOString().slice(0,10);
+const MONTH_AGO = new Date(Date.now()-30*24*3600*1000).toISOString().slice(0,10);
+document.getElementById('dl-from').value = MONTH_AGO;
+document.getElementById('dl-to').value = TODAY;
+
+let uploadTab = 'product';
+let parsedRows = [];
+
+function lb(on){const b=document.getElementById('loading-bar');if(on){b.style.width='60%';b.style.opacity='1';}else{b.style.width='100%';setTimeout(()=>{b.classList.add('done');setTimeout(()=>{b.style.width='0%';b.classList.remove('done');},300);},200);}};
+
+const CH_LABELS = { naver:'네이버', coupang:'쿠팡', esm:'G마켓/옥션', elevenst:'11번가', cafe24:'카페24', toss:'Toss', easy:'이지판매' };
+
+// ──────────────────────────────────────────────
+// 업로드 탭
+// ──────────────────────────────────────────────
+const GUIDES = {
+  product: `<b>품목 등록/수정</b> — 품목명이 동일하면 <b>수정</b>, 없으면 <b>신규 등록</b>됩니다.<br>
+    필수 컬럼: <b>품목명</b> / 선택: 카테고리, 구분(국내/국제), 원가, 단위, 위치<br>
+    채널별 판매단가도 함께 입력 가능 (네이버, 쿠팡, G마켓/옥션, 11번가, 카페24, Toss, 이지판매)`,
+  stock: `<b>재고 수량 수정</b> — 품목명으로 매칭해서 재고를 수정합니다.<br>
+    필수 컬럼: <b>품목명</b>, <b>창고명</b>(또는 창고1), <b>수량</b><br>
+    창고명은 정확히 일치해야 합니다 (예: 본사 창고)`
+};
+
+function switchUploadTab(tab, el) {
+  uploadTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('upload-guide').innerHTML = GUIDES[tab];
+  clearUpload();
+}
+document.getElementById('upload-guide').innerHTML = GUIDES.product;
+
+// ──────────────────────────────────────────────
+// 파일 처리
+// ──────────────────────────────────────────────
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+function onFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+  e.target.value = '';
+}
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+      if (!rows.length) { showToast('데이터가 없습니다', 'error'); return; }
+      if (uploadTab === 'product') parseProductRows(rows);
+      else parseStockRows(rows);
+    } catch(err) {
+      showToast('파일 읽기 실패: ' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ──────────────────────────────────────────────
+// 품목 파싱
+// ──────────────────────────────────────────────
+async function parseProductRows(rows) {
+  lb(true);
+  const existing = await getProductsWithPrices();
+  lb(false);
+  const existMap = {};
+  existing.forEach(p => { existMap[p.name.trim()] = p; });
+
+  parsedRows = rows.map(r => {
+    const name = (r['품목명'] || r['name'] || '').toString().trim();
+    if (!name) return { ...r, _status:'err', _msg:'품목명 없음' };
+    const isNew = !existMap[name];
+    return {
+      _name:   name,
+      _cat:    r['카테고리'] || r['category'] || '',
+      _type:   r['구분'] || r['type'] || '국내',
+      _cost:   parseInt(r['원가'] || r['cost']) || 0,
+      _unit:   parseInt(r['단위'] || r['unit']) || 1,
+      _loc:    r['위치'] || r['location'] || '',
+      _naver:  parseInt(r['네이버'] || r['naver']) || 0,
+      _coupang:parseInt(r['쿠팡'] || r['coupang']) || 0,
+      _esm:    parseInt(r['G마켓/옥션'] || r['esm']) || 0,
+      _elevenst:parseInt(r['11번가'] || r['elevenst']) || 0,
+      _cafe24: parseInt(r['카페24'] || r['cafe24']) || 0,
+      _toss:   parseInt(r['Toss'] || r['toss']) || 0,
+      _easy:   parseInt(r['이지판매'] || r['easy']) || 0,
+      _status: isNew ? 'new' : 'upd',
+      _msg:    isNew ? '신규 등록' : '기존 수정',
+      _existId: existMap[name]?.id || null,
+    };
+  });
+
+  showPreview();
+}
+
+// ──────────────────────────────────────────────
+// 재고 파싱
+// ──────────────────────────────────────────────
+async function parseStockRows(rows) {
+  lb(true);
+  const [products, warehouses] = await Promise.all([getProductsWithPrices(), getWarehouses()]);
+  lb(false);
+  const prodMap = {};
+  products.forEach(p => { prodMap[p.name.trim()] = p; });
+  const whMap = {};
+  warehouses.forEach(w => { whMap[w.name.trim()] = w; });
+
+  parsedRows = rows.map(r => {
+    const name = (r['품목명'] || r['name'] || '').toString().trim();
+    const whName = (r['창고명'] || r['창고'] || r['warehouse'] || Object.keys(whMap)[0] || '').toString().trim();
+    const qty = parseInt(r['수량'] || r['quantity'] || r['재고']) || 0;
+
+    if (!name) return { _status:'err', _msg:'품목명 없음', _name:'', _wh:whName, _qty:qty };
+    if (!prodMap[name]) return { _status:'err', _msg:'품목 없음', _name:name, _wh:whName, _qty:qty };
+    if (!whMap[whName] && whName) return { _status:'err', _msg:`창고 없음: ${whName}`, _name:name, _wh:whName, _qty:qty };
+
+    const wh = whName ? whMap[whName] : Object.values(whMap)[0];
+    return {
+      _name: name,
+      _wh: wh?.name || '',
+      _qty: qty,
+      _productId: prodMap[name].id,
+      _warehouseId: wh?.id,
+      _status: 'upd',
+      _msg: `${wh?.name||'창고'} → ${qty}개`,
+    };
+  });
+
+  showPreview();
+}
+
+// ──────────────────────────────────────────────
+// 미리보기
+// ──────────────────────────────────────────────
+function showPreview() {
+  const area = document.getElementById('preview-area');
+  area.style.display = 'block';
+
+  const newCnt = parsedRows.filter(r => r._status==='new').length;
+  const updCnt = parsedRows.filter(r => r._status==='upd').length;
+  const errCnt = parsedRows.filter(r => r._status==='err').length;
+
+  document.getElementById('preview-title').textContent = `미리보기 — 총 ${parsedRows.length}행`;
+  document.getElementById('preview-summary').innerHTML = `
+    ${newCnt ? `<span class="result-chip rc-ok">신규 ${newCnt}건</span>` : ''}
+    ${updCnt ? `<span class="result-chip rc-upd">수정 ${updCnt}건</span>` : ''}
+    ${errCnt ? `<span class="result-chip rc-err">오류 ${errCnt}건</span>` : ''}
+  `;
+
+  if (uploadTab === 'product') {
+    document.getElementById('preview-head').innerHTML = `<tr>
+      <th style="width:30px"></th>
+      <th style="width:160px">품목명</th><th>카테고리</th><th>구분</th>
+      <th class="right">원가</th><th>단위</th><th>위치</th>
+      <th class="right">네이버</th><th class="right">쿠팡</th><th>상태</th>
+    </tr>`;
+    document.getElementById('preview-body').innerHTML = parsedRows.map(r => `
+      <tr class="${r._status==='new'?'row-new':r._status==='upd'?'row-upd':'row-err'}">
+        <td><span class="row-badge ${r._status==='new'?'rb-new':r._status==='upd'?'rb-upd':'rb-err'}">${r._status==='new'?'신규':r._status==='upd'?'수정':'오류'}</span></td>
+        <td class="fw-bold">${r._name||'-'}</td>
+        <td>${r._cat||'-'}</td><td>${r._type||'-'}</td>
+        <td class="right mono">${r._cost?r._cost.toLocaleString():'-'}</td>
+        <td>${r._unit||1}</td><td>${r._loc||'-'}</td>
+        <td class="right mono">${r._naver||'-'}</td>
+        <td class="right mono">${r._coupang||'-'}</td>
+        <td class="text-muted text-sm">${r._msg||''}</td>
+      </tr>`).join('');
+  } else {
+    document.getElementById('preview-head').innerHTML = `<tr>
+      <th style="width:30px"></th>
+      <th style="width:180px">품목명</th><th>창고</th>
+      <th class="right">수량</th><th>상태</th>
+    </tr>`;
+    document.getElementById('preview-body').innerHTML = parsedRows.map(r => `
+      <tr class="${r._status==='upd'?'row-upd':'row-err'}">
+        <td><span class="row-badge ${r._status==='upd'?'rb-upd':'rb-err'}">${r._status==='upd'?'수정':'오류'}</span></td>
+        <td class="fw-bold">${r._name||'-'}</td>
+        <td>${r._wh||'-'}</td>
+        <td class="right mono fw-bold">${r._qty??'-'}</td>
+        <td class="text-muted text-sm">${r._msg||''}</td>
+      </tr>`).join('');
+  }
+
+  const uploadBtn = document.getElementById('upload-btn');
+  const validRows = parsedRows.filter(r => r._status !== 'err');
+  uploadBtn.disabled = !validRows.length;
+  uploadBtn.textContent = `DB에 저장 (${validRows.length}건)`;
+}
+
+function clearUpload() {
+  document.getElementById('preview-area').style.display = 'none';
+  parsedRows = [];
+}
+
+// ──────────────────────────────────────────────
+// DB 저장
+// ──────────────────────────────────────────────
+async function doUpload() {
+  const validRows = parsedRows.filter(r => r._status !== 'err');
+  if (!validRows.length) return;
+
+  const prog = document.getElementById('upload-progress');
+  const progFill = document.getElementById('prog-fill');
+  const progText = document.getElementById('prog-text');
+  const progPct  = document.getElementById('prog-pct');
+  prog.classList.add('show');
+
+  let done = 0;
+  const total = validRows.length;
+  const results = { ok:0, err:0 };
+
+  function updateProg() {
+    const pct = Math.round(done/total*100);
+    progFill.style.width = pct+'%';
+    progPct.textContent = pct+'%';
+    progText.textContent = `저장 중... (${done}/${total})`;
+  }
+
+  if (uploadTab === 'product') {
+    for (const r of validRows) {
+      try {
+        let productId = r._existId;
+        if (!productId) {
+          // 신규 등록
+          const { data, error } = await sb.from('products').insert({
+            name: r._name, category: r._cat||'기타', type: r._type||'국내',
+            cost: r._cost||0, unit: r._unit||1, location: r._loc||'',
+            updated_at: new Date().toISOString(),
+          }).select().single();
+          if (error) throw error;
+          productId = data.id;
+          // 창고 재고 초기화
+          const whs = await getWarehouses();
+          await sb.from('stock').insert(whs.map(w => ({ product_id:productId, warehouse_id:w.id, quantity:0 })));
+        } else {
+          // 기존 수정
+          const updates = {};
+          if (r._cat)  updates.category = r._cat;
+          if (r._type) updates.type = r._type;
+          if (r._cost) updates.cost = r._cost;
+          if (r._unit) updates.unit = r._unit;
+          if (r._loc)  updates.location = r._loc;
+          if (Object.keys(updates).length) {
+            updates.updated_at = new Date().toISOString();
+            await sb.from('products').update(updates).eq('id', productId);
+          }
+        }
+        // 채널 단가
+        const priceRows = CHANNELS.map(ch => ({ product_id:productId, channel:ch.key, price: r['_'+ch.key]||0, updated_at:new Date().toISOString() }))
+          .filter(p => p.price > 0);
+        if (priceRows.length) {
+          await sb.from('channel_prices').upsert(priceRows, { onConflict:'product_id,channel' });
+        }
+        results.ok++;
+      } catch(e) { results.err++; }
+      done++; updateProg();
+    }
+  } else {
+    // 재고 수정
+    for (const r of validRows) {
+      try {
+        await sb.from('stock').upsert(
+          { product_id:r._productId, warehouse_id:r._warehouseId, quantity:r._qty, updated_at:new Date().toISOString() },
+          { onConflict:'product_id,warehouse_id' }
+        );
+        results.ok++;
+      } catch(e) { results.err++; }
+      done++; updateProg();
+    }
+  }
+
+  progText.textContent = '완료!';
+  prog.classList.remove('show');
+  showToast(`저장 완료: ${results.ok}건 성공${results.err?`, ${results.err}건 실패`:''}`);
+  clearUpload();
+}
+
+// ──────────────────────────────────────────────
+// 다운로드 함수들
+// ──────────────────────────────────────────────
+async function downloadProducts() {
+  lb(true);
+  const products = await getProductsWithPrices();
+  const warehouses = await getWarehouses();
+  lb(false);
+
+  const rows = products.map(p => {
+    const row = {
+      '품목명': p.name,
+      '카테고리': p.category,
+      '구분': p.type,
+      '원가(패키지)': p.cost,
+      '단위': p.unit,
+      '개당원가': p.unit > 1 ? Math.round(p.cost/p.unit) : p.cost,
+      '위치': p.location || '',
+      '총재고': p.total_stock || 0,
+    };
+    warehouses.forEach(w => { row[w.name+'_재고'] = (p.stock?.[w.id] || 0); });
+    CHANNELS.forEach(ch => { row[CH_LABELS[ch.key]||ch.key] = (p.prices?.[ch.key] || 0); });
+    return row;
+  });
+
+  exportXlsx(rows, '품목현황_' + TODAY);
+}
+
+async function downloadStock() {
+  lb(true);
+  const [products, warehouses] = await Promise.all([getProductsWithPrices(), getWarehouses()]);
+  lb(false);
+
+  const rows = products.map(p => {
+    const s = p.total_stock || 0;
+    const row = {
+      '품목명': p.name,
+      '카테고리': p.category,
+      '위치': p.location || '',
+      '총재고': s,
+      '상태': s<=10?'발주필요':s<=20?'주의':'정상',
+    };
+    warehouses.forEach(w => { row[w.name] = (p.stock?.[w.id] || 0); });
+    return row;
+  });
+
+  exportXlsx(rows, '재고현황_' + TODAY);
+}
+
+async function downloadSales() {
+  const from = document.getElementById('dl-from').value;
+  const to   = document.getElementById('dl-to').value;
+  lb(true);
+  const sales = await getSales({ dateFrom: from||undefined, dateTo: to||undefined, limit:9999 });
+  lb(false);
+
+  if (!sales.length) { showToast('해당 기간 판매 데이터가 없습니다', 'error'); return; }
+
+  const rows = sales.map(s => ({
+    '날짜': s.date,
+    '시간': new Date(s.sold_at).toLocaleTimeString('ko-KR'),
+    '채널': CH_LABELS[s.channel] || s.channel,
+    '구매자': s.buyer_name,
+    '품목명': s.product_name,
+    '수량': s.quantity,
+    '비고': s.note,
+    '구분': s.report_type === 'morning' ? '출근' : '퇴근',
+  }));
+
+  exportXlsx(rows, `판매이력_${from}_${to}`);
+}
+
+function downloadTemplate(type) {
+  if (type === 'product') {
+    const rows = [
+      { '품목명':'예시품목A', '카테고리':'RFID/스티커', '구분':'국내', '원가':1000, '단위':1, '위치':'A-1', '네이버':1200, '쿠팡':1150, 'G마켓/옥션':1180, '11번가':1170, '카페24':1250, 'Toss':1200, '이지판매':0 },
+      { '품목명':'예시품목B', '카테고리':'뮤직박스', '구분':'국내', '원가':42000, '단위':1, '위치':'B-2', '네이버':45000, '쿠팡':43000, 'G마켓/옥션':44000, '11번가':43500, '카페24':46000, 'Toss':45000, '이지판매':0 },
+    ];
+    exportXlsx(rows, '품목등록_템플릿');
+  } else {
+    const rows = [
+      { '품목명':'예시품목A', '창고명':'본사 창고', '수량':50 },
+      { '품목명':'예시품목B', '창고명':'본사 창고', '수량':30 },
+    ];
+    exportXlsx(rows, '재고수정_템플릿');
+  }
+}
+
+function exportXlsx(rows, filename) {
+  const ws = XLSX.utils.json_to_sheet(rows);
+
+  // 컬럼 너비 자동
+  const cols = Object.keys(rows[0] || {});
+  ws['!cols'] = cols.map(k => ({ wch: Math.max(k.length, 10) }));
+
+  // 헤더 굵게 (A1 부터 끝까지)
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const addr = XLSX.utils.encode_cell({ r:0, c });
+    if (ws[addr]) ws[addr].s = { font:{ bold:true } };
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  XLSX.writeFile(wb, filename + '.xlsx');
+  showToast(filename + '.xlsx 다운로드됨');
+}
+
+// CHANNELS가 supabase.js에서 로드됨
+</script>
+</body>
+</html>

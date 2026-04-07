@@ -27,15 +27,26 @@
 <body>
 <nav class="topbar">
   <a href="index.html" class="logo">재고<em>&</em>단가</a>
-  <div class="nav-links">
-    <a href="index.html" class="nav-link">대시보드</a>
-    <a href="price.html" class="nav-link active">단가표</a>
-    <a href="sales.html"     class="nav-link">판매관리</a>
+      <div class="nav-links">
+    <a href="index.html"     class="nav-link">대시보드</a>
+    <a href="price.html"     class="nav-link">단가표</a>
     <a href="inventory.html" class="nav-link">재고현황</a>
-    <a href="report.html" class="nav-link">보고서</a>
+    <a href="sales.html"     class="nav-link">판매관리</a>
+    <a href="notes.html"     class="nav-link">제품특이사항</a>
+    <a href="excel.html"     class="nav-link">엑셀</a>
+    <a href="report.html"    class="nav-link">보고서</a>
+    <a href="settings.html"  class="nav-link">설정</a>
   </div>
   <div class="topbar-right"><span id="clock"></span></div>
 </nav>
+<script>
+(function(){
+  var cur = location.pathname.split('/').pop() || 'index.html';
+  document.querySelectorAll('.nav-link').forEach(function(a){
+    if(a.getAttribute('href') === cur) a.classList.add('active');
+  });
+})();
+</script>
 <div id="loading-bar"></div>
 <div class="toast" id="toast"></div>
 
