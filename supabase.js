@@ -4,7 +4,7 @@
 // ================================================================
 
 const SUPABASE_URL = 'https://qqisudyfktpnakldgrls.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlodXZ4emFrc3JuZnRzZnJtZWtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0MTUyMjgsImV4cCI6MjA5MDk5MTIyOH0.w96xBcE-QoY4IeUuopwBOOOQD56A5nYyQuB8yn8OwBY';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxaXN1ZHlma3RwbmFrbGRncmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTMxOTMsImV4cCI6MjA5MTAyOTE5M30.MWir7d_xbGU2ptnddl4JCHMBudZH1LK9kmOhBl-4dSA';
 
 // Supabase JS CDN 클라이언트 (index.html 등에서 script 태그로 로드)
 // <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
