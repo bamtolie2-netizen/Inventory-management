@@ -2,6 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>재고현황 — 재고&단가 관리</title>
 <link rel="stylesheet" href="shared.css">
@@ -379,7 +380,7 @@ async function renderHistory() {
   sessions=await getSessions();
   document.getElementById('hist-cnt').textContent=`총 ${sessions.length}회`;
   const selBtn=document.getElementById('hist-del-sel-btn');
-  if(selBtn) selBtn.style.display=histSel.size>0?'':\'none\';
+  if(selBtn) selBtn.style.display=histSel.size>0?'':'none';
   const list=document.getElementById('hist-list');
   if(!sessions.length){list.innerHTML='<div class="empty">저장된 실사 이력이 없습니다.</div>';histSel.clear();return;}
   list.innerHTML=[...sessions].reverse().map(s=>{
@@ -402,7 +403,7 @@ async function renderHistory() {
 function histOnCheck(id,checked){
   if(checked)histSel.add(id);else histSel.delete(id);
   const btn=document.getElementById('hist-del-sel-btn');
-  if(btn)btn.style.display=histSel.size>0?'':\'none\';
+  if(btn)btn.style.display=histSel.size>0?'':'none';
 }
 
 async function histDeleteSelected(){
