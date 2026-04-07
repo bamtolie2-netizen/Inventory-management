@@ -8,295 +8,475 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="supabase.js"></script>
 <style>
-.report-area { width:100%;font-family:var(--mono);font-size:13px;line-height:1.8;min-height:220px;padding:14px 16px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text1);resize:vertical; }
-.report-area:focus { border-color:var(--accent);background:var(--surface); }
-.ch-row { display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg);border-radius:var(--radius);margin-bottom:6px; }
-.ch-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
-.ch-lbl { font-weight:600;font-size:13px;width:110px;flex-shrink:0; }
-.ch-inp { font-family:var(--mono);text-align:right;width:70px; }
-.copy-flash { animation: flashBtn 0.4s ease; }
-@keyframes flashBtn { 0%,100%{transform:scale(1)} 50%{transform:scale(0.95)} }
-.chk-item { display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border); }
-.chk-item:last-child { border-bottom:none; }
-.chk { width:18px;height:18px;border:1.5px solid var(--border2);border-radius:4px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:all .15s; }
-.chk.done { background:var(--text1);border-color:var(--text1); }
-.chk.done::after { content:'✓';color:#fff;font-size:11px;font-weight:700; }
-.chk-text { font-size:13px;line-height:1.4; }
-.chk-text.done { color:var(--text3);text-decoration:line-through; }
-.chk-meta { font-size:11px;color:var(--text3);margin-top:1px; }
-.prog-ring { width:52px;height:52px;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center; }
-.prog-ring svg { position:absolute;top:0;left:0;transform:rotate(-90deg); }
-.prog-ring-val { position:relative;z-index:1;font-size:11px;font-weight:700;font-family:var(--mono); }
-.stat-row { display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border); }
-.stat-row:last-child { border-bottom:none; }
+.report-out{width:100%;font-family:var(--mono);font-size:13px;line-height:1.9;min-height:180px;padding:14px 16px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text1);resize:vertical}
+.report-out:focus{border-color:var(--accent);background:var(--surface)}
+.copy-flash{animation:flashBtn .4s ease}
+@keyframes flashBtn{0%,100%{transform:scale(1)}50%{transform:scale(0.96)}}
+.chk-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.chk-item:last-child{border-bottom:none}
+.chk{width:18px;height:18px;border:1.5px solid var(--border2);border-radius:4px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:all .15s}
+.chk.done{background:var(--text1);border-color:var(--text1)}
+.chk.done::after{content:'✓';color:#fff;font-size:11px;font-weight:700}
+.chk-text{font-size:13px;line-height:1.4}
+.chk-text.done{color:var(--text3);text-decoration:line-through}
+.prog-ring{width:52px;height:52px;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center}
+.prog-ring svg{position:absolute;top:0;left:0;transform:rotate(-90deg)}
+.prog-ring-val{position:relative;z-index:1;font-size:11px;font-weight:700;font-family:var(--mono)}
+.stat-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+.stat-row:last-child{border-bottom:none}
+
+/* ── 채널 블록 ── */
+.ch-block{border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:12px;overflow:hidden}
+.ch-block-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg);cursor:pointer;user-select:none}
+.ch-block-hd:hover{background:var(--bg2)}
+.ch-block-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ch-block-title{font-size:13px;font-weight:600;flex:1}
+.ch-block-count{font-size:12px;color:var(--text3);font-family:var(--mono)}
+.ch-block-toggle{font-size:11px;color:var(--text3);transition:transform .2s}
+.ch-block-body{padding:10px 14px;display:none;border-top:1px solid var(--border);background:var(--surface)}
+.ch-block-body.open{display:block}
+
+/* ── 출근: 주문자 행 ── */
+.order-row{display:grid;grid-template-columns:100px 1fr 70px auto;gap:6px;align-items:center;margin-bottom:6px}
+.order-row input{font-size:12.5px;padding:6px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1);width:100%}
+.order-row input:focus{outline:none;border-color:var(--accent)}
+.order-note{font-size:11.5px;padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1);width:100%}
+.order-note:focus{outline:none;border-color:var(--accent)}
+.del-btn{width:24px;height:24px;border:none;background:none;cursor:pointer;color:var(--text3);font-size:16px;line-height:1;flex-shrink:0;border-radius:4px;display:flex;align-items:center;justify-content:center}
+.del-btn:hover{background:var(--red-bg);color:var(--red)}
+.add-order-btn{font-size:11.5px;padding:4px 10px;border:1px dashed var(--border2);border-radius:6px;cursor:pointer;background:none;color:var(--text3);width:100%;text-align:left;margin-top:4px}
+.add-order-btn:hover{background:var(--bg);color:var(--text1)}
+
+/* ── 퇴근: 품목 행 ── */
+.item-row{display:grid;grid-template-columns:1fr 80px 1fr auto;gap:6px;align-items:center;margin-bottom:6px}
+.item-row input,.item-row textarea{font-size:12.5px;padding:6px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1);width:100%}
+.item-row input:focus,.item-row textarea:focus{outline:none;border-color:var(--accent)}
+.cat-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.cat-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px}
+
+/* ── 퇴근 카테고리 섹션 ── */
+.cat-section{margin-bottom:12px;padding:10px 12px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border)}
 </style>
 </head>
 <body>
-
 <nav class="topbar">
   <a href="index.html" class="logo">재고<em>&</em>단가</a>
   <div class="nav-links">
-    <a href="index.html"     class="nav-link">대시보드</a>
-    <a href="price.html"     class="nav-link">단가표</a>
+    <a href="index.html" class="nav-link">대시보드</a>
+    <a href="price.html" class="nav-link">단가표</a>
     <a href="inventory.html" class="nav-link">재고현황</a>
-    <a href="report.html"    class="nav-link active">보고서</a>
+    <a href="report.html" class="nav-link active">보고서</a>
   </div>
   <div class="topbar-right"><span id="clock"></span></div>
 </nav>
-
 <div id="loading-bar"></div>
 <div class="toast" id="toast"></div>
 
-<div class="page">
-  <div class="page-inner">
-    <div class="page-title">보고서 작성</div>
-    <div class="page-sub">출근·퇴근 판매 보고서 · 발주 보고 · 일일 루틴 체크</div>
+<div class="page"><div class="page-inner">
+  <div class="page-title">보고서 작성</div>
+  <div class="page-sub">출근·퇴근 판매 보고서 · 발주 보고 · 일일 루틴 체크</div>
 
-    <div style="display:grid;grid-template-columns:1fr 330px;gap:16px;align-items:start">
+  <div style="display:grid;grid-template-columns:1fr 310px;gap:16px;align-items:start">
 
-      <!-- Left: reports -->
-      <div>
-        <div class="tabs">
-          <div class="tab active" onclick="switchRep('morning',this)">출근 보고</div>
-          <div class="tab" onclick="switchRep('evening',this)">퇴근 보고</div>
-          <div class="tab" onclick="switchRep('order',this)">발주 보고</div>
-        </div>
-
-        <!-- Morning -->
-        <div id="rep-morning">
-          <div class="card"><div class="card-body">
-            <div class="card-hd">
-              <div><div class="card-title">출근 후 판매 보고</div><div class="card-sub" id="rep-d-m"></div></div>
-              <div style="display:flex;gap:8px">
-                <button class="btn" onclick="genReport('morning')">자동 생성</button>
-                <button class="btn" id="cp-m" onclick="copyRep('morning','cp-m')">복사</button>
-              </div>
-            </div>
-            <div style="margin-bottom:12px">
-              <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">채널별 신규 주문 수량</div>
-              <div id="ch-m"></div>
-              <button class="btn btn-sm btn-success" style="margin-top:6px" onclick="saveOrders('m')">주문 수량 저장</button>
-            </div>
-            <textarea class="report-area" id="rep-txt-m"></textarea>
-          </div></div>
-        </div>
-
-        <!-- Evening -->
-        <div id="rep-evening" style="display:none">
-          <div class="card"><div class="card-body">
-            <div class="card-hd">
-              <div><div class="card-title">퇴근 전 판매 보고</div><div class="card-sub" id="rep-d-e"></div></div>
-              <div style="display:flex;gap:8px">
-                <button class="btn" onclick="genReport('evening')">자동 생성</button>
-                <button class="btn" id="cp-e" onclick="copyRep('evening','cp-e')">복사</button>
-              </div>
-            </div>
-            <div style="margin-bottom:12px">
-              <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">채널별 처리 완료 수량</div>
-              <div id="ch-e"></div>
-              <button class="btn btn-sm btn-success" style="margin-top:6px" onclick="saveOrders('e')">처리 수량 저장</button>
-            </div>
-            <textarea class="report-area" id="rep-txt-e"></textarea>
-          </div></div>
-        </div>
-
-        <!-- Order -->
-        <div id="rep-order" style="display:none">
-          <div class="card"><div class="card-body">
-            <div class="card-hd">
-              <div><div class="card-title">발주 보고서</div><div class="card-sub">재고 10개 이하 품목 자동 수집</div></div>
-              <div style="display:flex;gap:8px">
-                <button class="btn" onclick="genOrderReport()">자동 생성</button>
-                <button class="btn" id="cp-o" onclick="copyRep('order','cp-o')">복사</button>
-              </div>
-            </div>
-            <div style="display:flex;gap:16px;padding:12px 16px;background:var(--bg);border-radius:var(--radius);margin-bottom:12px;flex-wrap:wrap;font-size:13px">
-              <div style="display:flex;align-items:center;gap:7px"><div style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></div>국내/포장재 → <strong>임은화 부장님</strong></div>
-              <div style="display:flex;align-items:center;gap:7px"><div style="width:8px;height:8px;border-radius:50%;background:#7C3AED"></div>국제 제품 → <strong>임남호 전무님</strong></div>
-            </div>
-            <div id="order-alerts" style="margin-bottom:12px"></div>
-            <textarea class="report-area" id="rep-txt-o"></textarea>
-          </div></div>
-        </div>
+    <!-- ═══ LEFT ═══ -->
+    <div>
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('morning',this)">출근 보고</div>
+        <div class="tab" onclick="switchTab('evening',this)">퇴근 보고</div>
+        <div class="tab" onclick="switchTab('order-rep',this)">발주 보고</div>
       </div>
 
-      <!-- Right: routine + stats -->
-      <div>
-        <div class="card">
-          <div class="card-body">
-            <div class="card-hd">
-              <div class="card-title">일일 루틴</div>
-              <div style="display:flex;align-items:center;gap:10px">
-                <div class="prog-ring">
-                  <svg width="52" height="52" viewBox="0 0 52 52">
-                    <circle cx="26" cy="26" r="22" fill="none" stroke="var(--bg2)" stroke-width="4"/>
-                    <circle cx="26" cy="26" r="22" fill="none" stroke="var(--accent)" stroke-width="4"
-                      stroke-dasharray="138.2" id="prog-circle" stroke-dashoffset="138.2" stroke-linecap="round"/>
-                  </svg>
-                  <span class="prog-ring-val" id="prog-val">0%</span>
-                </div>
-                <span id="prog-txt" style="font-size:12px;color:var(--text3)">0/0</span>
-              </div>
+      <!-- ── 출근 보고 (주문자별 상세) ── -->
+      <div id="pane-morning">
+        <div class="card"><div class="card-body">
+          <div class="card-hd">
+            <div>
+              <div class="card-title">출근 보고</div>
+              <div class="card-sub" id="morning-date"></div>
             </div>
-
-            <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">출근</div>
-            <div id="rt-morning"></div>
-            <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">수시</div>
-            <div id="rt-always"></div>
-            <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">퇴근</div>
-            <div id="rt-evening"></div>
-            <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
-              <button class="btn btn-sm" onclick="resetRt()">체크 초기화</button>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-sm" onclick="genMorning()">자동 생성</button>
+              <button class="btn btn-sm btn-primary" id="cp-m" onclick="copyReport('rep-m','cp-m')">복사</button>
             </div>
           </div>
-        </div>
 
-        <div class="card">
-          <div class="card-body">
-            <div class="card-title" style="margin-bottom:12px">오늘 현황</div>
-            <div id="quick-stats"></div>
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">
+            채널별 주문자 입력
+            <span style="font-weight:400;color:var(--text3);text-transform:none;letter-spacing:0;font-size:11px;margin-left:6px">이름 / 품목 / 수량 (비고)</span>
           </div>
-        </div>
+
+          <div id="morning-channels"></div>
+
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">생성된 보고서</div>
+            <textarea class="report-out" id="rep-m" placeholder="위에서 입력 후 '자동 생성' 버튼을 누르세요"></textarea>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- ── 퇴근 보고 (품목별 합산) ── -->
+      <div id="pane-evening" style="display:none">
+        <div class="card"><div class="card-body">
+          <div class="card-hd">
+            <div>
+              <div class="card-title">퇴근 보고</div>
+              <div class="card-sub" id="evening-date"></div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-sm" onclick="genEvening()">자동 생성</button>
+              <button class="btn btn-sm btn-primary" id="cp-e" onclick="copyReport('rep-e','cp-e')">복사</button>
+            </div>
+          </div>
+
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">
+            카테고리별 품목 입력
+            <span style="font-weight:400;color:var(--text3);text-transform:none;letter-spacing:0;font-size:11px;margin-left:6px">품목명 / 수량 / 비고</span>
+          </div>
+
+          <div id="evening-cats"></div>
+          <button class="btn btn-sm" onclick="addCategory()" style="margin-bottom:14px;width:100%;border-style:dashed">+ 카테고리 추가</button>
+
+          <div style="padding-top:12px;border-top:1px solid var(--border)">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">생성된 보고서</div>
+            <textarea class="report-out" id="rep-e" placeholder="위에서 입력 후 '자동 생성' 버튼을 누르세요"></textarea>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- ── 발주 보고 ── -->
+      <div id="pane-order-rep" style="display:none">
+        <div class="card"><div class="card-body">
+          <div class="card-hd">
+            <div><div class="card-title">발주 보고서</div><div class="card-sub">재고 10개 이하 자동 수집</div></div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-sm" onclick="genOrderReport()">자동 생성</button>
+              <button class="btn btn-sm btn-primary" id="cp-o" onclick="copyReport('rep-o','cp-o')">복사</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:14px;padding:10px 14px;background:var(--bg);border-radius:var(--radius);margin-bottom:12px;font-size:13px;flex-wrap:wrap">
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block"></span>국내/포장재 → <strong>임은화 부장님</strong></span>
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#7C3AED;display:inline-block"></span>국제 제품 → <strong>임남호 전무님</strong></span>
+          </div>
+          <div id="order-alerts" style="margin-bottom:12px"></div>
+          <textarea class="report-out" id="rep-o" placeholder="'자동 생성' 버튼을 누르세요"></textarea>
+        </div></div>
       </div>
     </div>
+
+    <!-- ═══ RIGHT ═══ -->
+    <div>
+      <div class="card"><div class="card-body">
+        <div class="card-hd">
+          <div class="card-title">일일 루틴</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="prog-ring">
+              <svg width="52" height="52" viewBox="0 0 52 52">
+                <circle cx="26" cy="26" r="22" fill="none" stroke="var(--bg2)" stroke-width="4"/>
+                <circle cx="26" cy="26" r="22" fill="none" stroke="var(--accent)" stroke-width="4"
+                  stroke-dasharray="138.2" id="prog-circle" stroke-dashoffset="138.2" stroke-linecap="round"/>
+              </svg>
+              <span class="prog-ring-val" id="prog-val">0%</span>
+            </div>
+            <span id="prog-txt" style="font-size:12px;color:var(--text3)">0/0</span>
+          </div>
+        </div>
+        <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">출근</div>
+        <div id="rt-morning"></div>
+        <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 5px">수시</div>
+        <div id="rt-always"></div>
+        <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 5px">퇴근</div>
+        <div id="rt-evening"></div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <button class="btn btn-sm" onclick="resetRt()">체크 초기화</button>
+        </div>
+      </div></div>
+
+      <div class="card"><div class="card-body">
+        <div class="card-title" style="margin-bottom:10px">오늘 현황</div>
+        <div id="quick-stats"></div>
+      </div></div>
+    </div>
   </div>
-</div>
+</div></div>
 
 <script>
-(function tick(){ document.getElementById('clock').textContent=new Date().toLocaleString('ko-KR',{month:'short',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'}); setTimeout(tick,30000); })();
+(function tick(){document.getElementById('clock').textContent=new Date().toLocaleString('ko-KR',{month:'short',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});setTimeout(tick,30000);})();
 
-const NOW=new Date(), TODAY=NOW.toISOString().slice(0,10);
-const DS=NOW.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
+const NOW=new Date(),TODAY=NOW.toISOString().slice(0,10);
+const DS=NOW.toLocaleDateString('ko-KR',{year:'numeric',month:'numeric',day:'numeric',weekday:'short'}).replace(/\. /g,'.').replace('.)',')');
 const TS=NOW.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-document.getElementById('rep-d-m').textContent=DS+' 출근';
-document.getElementById('rep-d-e').textContent=DS+' 퇴근';
 
-function lb(on){ const b=document.getElementById('loading-bar'); if(on){b.style.width='60%';b.style.opacity='1';}else{b.style.width='100%';setTimeout(()=>{b.classList.add('done');setTimeout(()=>{b.style.width='0%';b.classList.remove('done');},300);},200);} }
+let products=[],sessions=[];
 
-let products=[], sessions=[];
-let chOrders={ m:{}, e:{} }; // { m: {naver:32,...}, e: {naver:28,...} }
+function lb(on){const b=document.getElementById('loading-bar');if(on){b.style.width='60%';b.style.opacity='1';}else{b.style.width='100%';setTimeout(()=>{b.classList.add('done');setTimeout(()=>{b.style.width='0%';b.classList.remove('done');},300);},200);}};
 
-function switchRep(tab,el) {
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); el.classList.add('active');
-  ['morning','evening','order'].forEach(r=>{ document.getElementById('rep-'+r).style.display=r===tab?'block':'none'; });
-  if(tab==='order') genOrderReport();
+// ──────────────────────────────────────────────
+// TAB
+// ──────────────────────────────────────────────
+function switchTab(id,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');
+  ['morning','evening','order-rep'].forEach(p=>document.getElementById('pane-'+p).style.display=p===id?'block':'none');
+  if(id==='order-rep') genOrderReport();
 }
 
-async function loadData() {
-  lb(true);
-  [products,,sessions] = await Promise.all([getProductsWithPrices(), getWarehouses(), getSessions()]);
-  // Load today's orders
-  const orders = await getDailyOrders(TODAY);
-  orders.forEach(o => {
-    if(o.ordered)   chOrders.m[o.channel] = o.ordered;
-    if(o.processed) chOrders.e[o.channel] = o.processed;
+// ──────────────────────────────────────────────
+// 출근 보고 — 채널별 주문자 입력
+// ──────────────────────────────────────────────
+// morningData: { chKey: [ {name, item, qty, note} ] }
+const morningData={};
+const SAVE_KEY_M='report_morning_'+TODAY;
+
+function initMorning(){
+  document.getElementById('morning-date').textContent=DS+' 출근';
+  const saved=JSON.parse(localStorage.getItem(SAVE_KEY_M)||'null');
+  if(saved){Object.assign(morningData,saved);}
+  else{CHANNELS.forEach(ch=>{morningData[ch.key]=[];});}
+  renderMorningChannels();
+}
+
+function renderMorningChannels(){
+  const el=document.getElementById('morning-channels');
+  el.innerHTML=CHANNELS.map(ch=>{
+    const rows=morningData[ch.key]||[];
+    const total=rows.reduce((a,r)=>a+(parseInt(r.qty)||0),0);
+    return `<div class="ch-block" id="chb-${ch.key}">
+      <div class="ch-block-hd" onclick="toggleChBlock('${ch.key}')">
+        <div class="ch-block-dot" style="background:${ch.color}"></div>
+        <div class="ch-block-title">${ch.label}</div>
+        <div class="ch-block-count" id="chb-cnt-${ch.key}">${total?total+'건':'입력없음'}</div>
+        <div class="ch-block-toggle" id="chb-arr-${ch.key}">▼</div>
+      </div>
+      <div class="ch-block-body" id="chb-body-${ch.key}">
+        <div id="chb-rows-${ch.key}">
+          ${rows.map((r,i)=>orderRowHTML(ch.key,i,r)).join('')}
+        </div>
+        <button class="add-order-btn" onclick="addOrderRow('${ch.key}')">+ 주문자 추가</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function orderRowHTML(chKey,idx,r){
+  return `<div class="order-row" id="row-${chKey}-${idx}">
+    <input placeholder="주문자 이름" value="${r.name||''}" oninput="setOrder('${chKey}',${idx},'name',this.value)">
+    <input placeholder="품목명" value="${r.item||''}" oninput="setOrder('${chKey}',${idx},'item',this.value)">
+    <input type="number" placeholder="수량" min="0" value="${r.qty||''}" oninput="setOrder('${chKey}',${idx},'qty',this.value)" style="text-align:right">
+    <button class="del-btn" onclick="delOrderRow('${chKey}',${idx})" title="삭제">×</button>
+    <div style="grid-column:1/-1"><input class="order-note" placeholder="비고 (예: 퍼플필터 1개, 블루필터 3개)" value="${r.note||''}" oninput="setOrder('${chKey}',${idx},'note',this.value)"></div>
+  </div>`;
+}
+
+function toggleChBlock(key){
+  const body=document.getElementById('chb-body-'+key);
+  const arr=document.getElementById('chb-arr-'+key);
+  body.classList.toggle('open');
+  arr.textContent=body.classList.contains('open')?'▲':'▼';
+}
+
+function addOrderRow(chKey){
+  if(!morningData[chKey]) morningData[chKey]=[];
+  morningData[chKey].push({name:'',item:'',qty:'',note:''});
+  const rowsEl=document.getElementById('chb-rows-'+chKey);
+  const idx=morningData[chKey].length-1;
+  rowsEl.insertAdjacentHTML('beforeend',orderRowHTML(chKey,idx,morningData[chKey][idx]));
+  // open block
+  const body=document.getElementById('chb-body-'+chKey);
+  const arr=document.getElementById('chb-arr-'+chKey);
+  if(!body.classList.contains('open')){body.classList.add('open');arr.textContent='▲';}
+}
+
+function setOrder(chKey,idx,field,val){
+  if(!morningData[chKey]) morningData[chKey]=[];
+  if(!morningData[chKey][idx]) morningData[chKey][idx]={};
+  morningData[chKey][idx][field]=val;
+  // update count badge
+  const total=morningData[chKey].reduce((a,r)=>a+(parseInt(r.qty)||0),0);
+  const cnt=document.getElementById('chb-cnt-'+chKey);
+  if(cnt) cnt.textContent=total?total+'건':'입력없음';
+  // autosave
+  localStorage.setItem(SAVE_KEY_M,JSON.stringify(morningData));
+}
+
+function delOrderRow(chKey,idx){
+  morningData[chKey].splice(idx,1);
+  const rowsEl=document.getElementById('chb-rows-'+chKey);
+  rowsEl.innerHTML=morningData[chKey].map((r,i)=>orderRowHTML(chKey,i,r)).join('');
+  const total=morningData[chKey].reduce((a,r)=>a+(parseInt(r.qty)||0),0);
+  const cnt=document.getElementById('chb-cnt-'+chKey);
+  if(cnt) cnt.textContent=total?total+'건':'입력없음';
+  localStorage.setItem(SAVE_KEY_M,JSON.stringify(morningData));
+}
+
+function genMorning(){
+  const lines=[];
+  let grandTotal=0;
+  CHANNELS.forEach(ch=>{
+    const rows=(morningData[ch.key]||[]).filter(r=>r.name||r.item||r.qty);
+    if(!rows.length) return;
+    const chTotal=rows.reduce((a,r)=>a+(parseInt(r.qty)||0),0);
+    grandTotal+=chTotal;
+    lines.push(`\n[${ch.label}]`);
+    rows.forEach(r=>{
+      let line=`${r.name||'(이름없음)'} - ${r.item||'(품목없음)'}`;
+      if(r.qty) line+=` / ${r.qty}개`;
+      if(r.note) line+=` (${r.note})`;
+      lines.push(line);
+    });
   });
-  lb(false);
-  renderChannelInputs();
-  renderQuickStats();
-}
-
-function renderChannelInputs() {
-  ['m','e'].forEach(sfx => {
-    const lbl = sfx==='m' ? '신규 주문' : '처리 완료';
-    document.getElementById('ch-'+sfx).innerHTML = CHANNELS.map(ch=>`
-      <div class="ch-row">
-        <div class="ch-dot" style="background:${ch.color}"></div>
-        <div class="ch-lbl">${ch.label}</div>
-        <input class="inp ch-inp" type="number" min="0" value="${chOrders[sfx][ch.key]||''}" placeholder="0"
-          oninput="chOrders['${sfx}']['${ch.key}']=parseInt(this.value)||0">
-        <span style="font-size:12px;color:var(--text3);margin-left:4px">${lbl}</span>
-      </div>`).join('');
-  });
-}
-
-async function saveOrders(sfx) {
-  lb(true);
-  for(const ch of CHANNELS) {
-    const ordered    = sfx==='m' ? (chOrders.m[ch.key]||0) : undefined;
-    const processed  = sfx==='e' ? (chOrders.e[ch.key]||0) : undefined;
-    if(ordered!==undefined || processed!==undefined) {
-      await upsertDailyOrder(TODAY, ch.key, ordered??chOrders.m[ch.key]??0, processed??chOrders.e[ch.key]??0);
-    }
-  }
-  lb(false);
-  showToast('저장됨');
-}
-
-function genReport(type) {
   const danger=products.filter(p=>totalStock(p)<=10);
-  const dText=danger.length?danger.map(p=>`  · ${p.name}: ${totalStock(p)}개 (${p.type==='국내'?'임은화 부장':'임남호 전무'})`).join('\n'):'  · 발주 필요 없음';
-  const lastSess=sessions.length?sessions[sessions.length-1].date:'없음';
-  if(type==='morning'){
-    const total=Object.values(chOrders.m).reduce((a,v)=>a+v,0);
-    const lines=CHANNELS.filter(c=>chOrders.m[c.key]).map(c=>`  · ${c.label}: ${chOrders.m[c.key]}건`).join('\n');
-    document.getElementById('rep-txt-m').value=
-`[${DS} 출근 보고] ${TS}
-
-안녕하세요. 업무 시작 보고드립니다.
-
-📦 전일 주문 현황 (총 ${total}건)
-${lines||'  · 채널별 수량을 위에서 입력 후 저장해주세요'}
-
-📊 재고 현황
-  · 전체 품목: ${products.length}개
-  · 발주필요(10개↓): ${danger.length}건
-${dText}
-  · 마지막 실사: ${lastSess}
-
-💬 문의 현황
-  · 채널톡: 확인 중
-  · 카카오비즈니스: 확인 중
-
-감사합니다.`;
-  } else {
-    const total=Object.values(chOrders.e).reduce((a,v)=>a+v,0);
-    const lines=CHANNELS.filter(c=>chOrders.e[c.key]).map(c=>`  · ${c.label}: ${chOrders.e[c.key]}건`).join('\n');
-    document.getElementById('rep-txt-e').value=
-`[${DS} 퇴근 보고] ${TS}
-
-오늘 업무 마감 보고드립니다.
-
-✅ 처리 현황 (총 ${total}건)
-${lines||'  · 채널별 수량을 위에서 입력 후 저장해주세요'}
-
-📊 재고 최종 점검
-  · 발주필요(10개↓): ${danger.length}건
-${dText}
-
-내일도 잘 부탁드립니다.`;
-  }
+  const dangerTxt=danger.length?'\n\n⚠ 발주필요: '+danger.map(p=>p.name+'('+totalStock(p)+'개)').join(', '):'';
+  const txt=`${DS}\n주문 현황 (총 ${grandTotal}건)${lines.join('\n')}${dangerTxt}`;
+  document.getElementById('rep-m').value=txt;
 }
 
-async function genOrderReport() {
-  const danger=products.filter(p=>totalStock(p)<=10), warn=products.filter(p=>totalStock(p)>10&&totalStock(p)<=20);
-  const alertEl=document.getElementById('order-alerts');
-  alertEl.innerHTML=[
+// ──────────────────────────────────────────────
+// 퇴근 보고 — 카테고리별 품목 합산
+// ──────────────────────────────────────────────
+// eveningData: [ { catName, items:[ {name, qty, note} ] } ]
+let eveningData=[];
+const SAVE_KEY_E='report_evening_'+TODAY;
+
+const DEFAULT_CATS=[
+  {catName:'1. RF 스티커', items:[
+    {name:'UID 변경가능 스티커(125Khz) 18mm',qty:'',note:''},
+    {name:'UID 변경가능 스티커(125Khz) 25mm',qty:'',note:''},
+    {name:'고리형태그',qty:'',note:''},
+    {name:'UID 변경가능 스티커(13.56Mhz)',qty:'',note:''},
+    {name:'13.56Mhz NFC공카드',qty:'',note:''},
+    {name:'125Khz EM공카드',qty:'',note:''},
+    {name:'안티메탈 시트 3M',qty:'',note:''},
+    {name:'안티메탈 중국',qty:'',note:''},
+    {name:'복제기',qty:'',note:''},
+    {name:'주문제작 RF스티커',qty:'',note:''},
+  ]},
+  {catName:'2. 미세먼지 관련 상품', items:[
+    {name:'S3 측정기',qty:'',note:''},
+    {name:'샤오미 공기청정기 필터',qty:'',note:''},
+  ]},
+  {catName:'3. 기타 상품', items:[
+    {name:'내리미',qty:'',note:''},
+    {name:'대형우산',qty:'',note:''},
+    {name:'소형우산',qty:'',note:''},
+  ]},
+];
+
+function initEvening(){
+  document.getElementById('evening-date').textContent=DS+' 퇴근';
+  const saved=JSON.parse(localStorage.getItem(SAVE_KEY_E)||'null');
+  eveningData=saved?saved:JSON.parse(JSON.stringify(DEFAULT_CATS));
+  renderEveningCats();
+}
+
+function renderEveningCats(){
+  const el=document.getElementById('evening-cats');
+  el.innerHTML=eveningData.map((cat,ci)=>`
+    <div class="cat-section" id="cat-${ci}">
+      <div class="cat-hd">
+        <input value="${cat.catName}" placeholder="카테고리명" oninput="setCatName(${ci},this.value)"
+          style="font-size:13px;font-weight:600;padding:4px 8px;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--text1);width:220px">
+        <button class="btn btn-sm btn-danger" onclick="removeCat(${ci})" style="font-size:11px;padding:3px 8px">카테고리 삭제</button>
+      </div>
+      <div style="display:grid;grid-template-columns:auto 60px 1fr auto;gap:4px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px;padding:0 2px">
+        <span>품목명</span><span style="text-align:right">수량</span><span>비고</span><span></span>
+      </div>
+      <div id="cat-items-${ci}">
+        ${cat.items.map((item,ii)=>eveningItemHTML(ci,ii,item)).join('')}
+      </div>
+      <button class="add-order-btn" onclick="addItem(${ci})">+ 품목 추가</button>
+    </div>
+  `).join('');
+}
+
+function eveningItemHTML(ci,ii,item){
+  return `<div class="item-row" id="erow-${ci}-${ii}">
+    <input placeholder="품목명" value="${item.name||''}" oninput="setItem(${ci},${ii},'name',this.value)">
+    <input type="number" placeholder="0" min="0" value="${item.qty||''}" oninput="setItem(${ci},${ii},'qty',this.value)" style="text-align:right">
+    <input placeholder="비고 (예: 일반형 1개, 프리미엄 2개)" value="${item.note||''}" oninput="setItem(${ci},${ii},'note',this.value)">
+    <button class="del-btn" onclick="removeItem(${ci},${ii})" title="삭제">×</button>
+  </div>`;
+}
+
+function setCatName(ci,val){eveningData[ci].catName=val;saveEvening();}
+function setItem(ci,ii,field,val){eveningData[ci].items[ii][field]=val;saveEvening();}
+function saveEvening(){localStorage.setItem(SAVE_KEY_E,JSON.stringify(eveningData));}
+
+function addItem(ci){
+  eveningData[ci].items.push({name:'',qty:'',note:''});
+  const el=document.getElementById('cat-items-'+ci);
+  const ii=eveningData[ci].items.length-1;
+  el.insertAdjacentHTML('beforeend',eveningItemHTML(ci,ii,eveningData[ci].items[ii]));
+  saveEvening();
+}
+
+function removeItem(ci,ii){
+  eveningData[ci].items.splice(ii,1);
+  document.getElementById('cat-items-'+ci).innerHTML=
+    eveningData[ci].items.map((item,i)=>eveningItemHTML(ci,i,item)).join('');
+  saveEvening();
+}
+
+function addCategory(){
+  eveningData.push({catName:`${eveningData.length+1}. 새 카테고리`,items:[{name:'',qty:'',note:''}]});
+  renderEveningCats();saveEvening();
+}
+
+function removeCat(ci){
+  if(!confirm('이 카테고리를 삭제하시겠습니까?')) return;
+  eveningData.splice(ci,1);renderEveningCats();saveEvening();
+}
+
+function genEvening(){
+  const lines=[DS];
+  eveningData.forEach(cat=>{
+    const filled=cat.items.filter(i=>i.name&&(i.qty||i.note));
+    if(!filled.length) return;
+    lines.push(cat.catName);
+    filled.forEach(item=>{
+      let line=`${item.name} :`;
+      if(item.qty) line+=` ${item.qty}개`;
+      if(item.note) line+= item.qty ? ` (${item.note})` : ` ${item.note}`;
+      lines.push(line);
+    });
+  });
+  const danger=products.filter(p=>totalStock(p)<=10);
+  if(danger.length) lines.push('\n⚠ 발주필요: '+danger.map(p=>p.name+'('+totalStock(p)+'개)').join(', '));
+  document.getElementById('rep-e').value=lines.join('\n');
+}
+
+// ──────────────────────────────────────────────
+// 발주 보고
+// ──────────────────────────────────────────────
+async function genOrderReport(){
+  const danger=products.filter(p=>totalStock(p)<=10),warn=products.filter(p=>totalStock(p)>10&&totalStock(p)<=20);
+  document.getElementById('order-alerts').innerHTML=[
     ...danger.map(p=>`<div class="alert-item alert-danger"><div class="alert-title">${p.name} — 재고 ${totalStock(p)}개</div><div class="alert-sub">${p.type} · ${p.type==='국내'?'임은화 부장님':'임남호 전무님'} · 즉시 발주</div></div>`),
     ...warn.map(p=>`<div class="alert-item alert-warn"><div class="alert-title">${p.name} — 재고 ${totalStock(p)}개</div><div class="alert-sub">${p.type} · 발주 준비 권장</div></div>`)
-  ].join('') || '<div class="empty" style="padding:16px">발주 필요 품목 없음 ✓</div>';
-
-  const domestic=danger.filter(p=>p.type==='국내'), intl=danger.filter(p=>p.type==='국제');
-  document.getElementById('rep-txt-o').value=
-`[${DS} 발주 보고] ${TS}
+  ].join('')||'<div class="empty" style="padding:14px">발주 필요 품목 없음 ✓</div>';
+  const domestic=danger.filter(p=>p.type==='국내'),intl=danger.filter(p=>p.type==='국제');
+  document.getElementById('rep-o').value=
+`[${DS} 발주 보고]
 
 발주 필요 품목 보고드립니다.
 
-${domestic.length?`[임은화 부장님 — 국내/포장재]\n${domestic.map(p=>`  · ${p.name}: 현재 ${totalStock(p)}개`).join('\n')}\n\n`:''}${intl.length?`[임남호 전무님 — 국제 제품]\n${intl.map(p=>`  · ${p.name}: 현재 ${totalStock(p)}개`).join('\n')}\n\n`:''}${warn.length?`[발주 준비 권장]\n${warn.map(p=>`  · ${p.name}: 현재 ${totalStock(p)}개`).join('\n')}\n\n`:''}확인 부탁드립니다. 감사합니다.`;
+${domestic.length?`[임은화 부장님 — 국내/포장재]\n${domestic.map(p=>`${p.name}: 현재 ${totalStock(p)}개`).join('\n')}\n\n`:''}${intl.length?`[임남호 전무님 — 국제 제품]\n${intl.map(p=>`${p.name}: 현재 ${totalStock(p)}개`).join('\n')}\n\n`:''}${warn.length?`[발주 준비 권장]\n${warn.map(p=>`${p.name}: 현재 ${totalStock(p)}개`).join('\n')}\n\n`:''}확인 부탁드립니다. 감사합니다.`;
 }
 
-function copyRep(tab, btnId) {
-  const map={morning:'rep-txt-m',evening:'rep-txt-e',order:'rep-txt-o'};
-  const txt=document.getElementById(map[tab])?.value||'';
+// ──────────────────────────────────────────────
+// 복사
+// ──────────────────────────────────────────────
+function copyReport(areaId,btnId){
+  const txt=document.getElementById(areaId)?.value||'';
   if(!txt){showToast('먼저 보고서를 생성하세요','error');return;}
   navigator.clipboard.writeText(txt).then(()=>{
     const btn=document.getElementById(btnId);
-    const orig=btn.textContent; btn.textContent='복사됨!'; btn.classList.add('copy-flash');
+    const orig=btn.textContent;btn.textContent='복사됨!';btn.classList.add('copy-flash');
     setTimeout(()=>{btn.textContent=orig;btn.classList.remove('copy-flash');},1800);
   }).catch(()=>showToast('복사 실패','error'));
 }
 
-// Routine
+// ──────────────────────────────────────────────
+// 루틴
+// ──────────────────────────────────────────────
 const ROUTINES=[
   {id:0,text:'네이버 스마트스토어 신규 발주 확인',tag:'morning'},
   {id:1,text:'쿠팡 신규 발주 확인',tag:'morning'},
@@ -314,29 +494,26 @@ const ROUTINES=[
 const RT_KEY='inv_rt_'+NOW.toDateString();
 let rtDone=JSON.parse(localStorage.getItem(RT_KEY)||'[]');
 
-function renderRoutine() {
-  const total=ROUTINES.length, done=rtDone.length, pct=Math.round(done/total*100);
-  const circumference=2*Math.PI*22; // r=22
-  document.getElementById('prog-circle').style.strokeDashoffset=circumference*(1-pct/100);
+function renderRoutine(){
+  const total=ROUTINES.length,done=rtDone.length,pct=Math.round(done/total*100);
+  const circ=2*Math.PI*22;
+  document.getElementById('prog-circle').style.strokeDashoffset=circ*(1-pct/100);
   document.getElementById('prog-val').textContent=pct+'%';
   document.getElementById('prog-txt').textContent=`${done}/${total}`;
   ['morning','always','evening'].forEach(tag=>{
     document.getElementById('rt-'+tag).innerHTML=ROUTINES.filter(r=>r.tag===tag).map(r=>{
-      const done=rtDone.includes(r.id);
-      return `<div class="chk-item">
-        <div class="chk ${done?'done':''}" onclick="toggleRt(${r.id})"></div>
-        <div><div class="chk-text ${done?'done':''}">${r.text}</div></div>
-      </div>`;
+      const d=rtDone.includes(r.id);
+      return `<div class="chk-item"><div class="chk ${d?'done':''}" onclick="toggleRt(${r.id})"></div><div class="chk-text ${d?'done':''}">${r.text}</div></div>`;
     }).join('');
   });
 }
-function toggleRt(id) {
-  rtDone=rtDone.includes(id)?rtDone.filter(x=>x!==id):[...rtDone,id];
-  localStorage.setItem(RT_KEY,JSON.stringify(rtDone)); renderRoutine();
-}
-function resetRt() { if(!confirm('오늘 루틴을 초기화하시겠습니까?')) return; rtDone=[]; localStorage.setItem(RT_KEY,JSON.stringify(rtDone)); renderRoutine(); }
+function toggleRt(id){rtDone=rtDone.includes(id)?rtDone.filter(x=>x!==id):[...rtDone,id];localStorage.setItem(RT_KEY,JSON.stringify(rtDone));renderRoutine();}
+function resetRt(){if(!confirm('오늘 루틴을 초기화하시겠습니까?'))return;rtDone=[];localStorage.setItem(RT_KEY,JSON.stringify(rtDone));renderRoutine();}
 
-function renderQuickStats() {
+// ──────────────────────────────────────────────
+// 오늘 현황
+// ──────────────────────────────────────────────
+function renderQuickStats(){
   const danger=products.filter(p=>totalStock(p)<=10).length;
   const warn=products.filter(p=>totalStock(p)>10&&totalStock(p)<=20).length;
   const lastSess=sessions.length?sessions[sessions.length-1].date:'없음';
@@ -349,7 +526,19 @@ function renderQuickStats() {
   `;
 }
 
+// ──────────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────────
+async function loadData(){
+  lb(true);
+  [products,,sessions]=await Promise.all([getProductsWithPrices(),getWarehouses(),getSessions()]);
+  lb(false);
+  renderQuickStats();
+}
+
 loadData();
+initMorning();
+initEvening();
 renderRoutine();
 </script>
 </body>
