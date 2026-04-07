@@ -3,8 +3,8 @@
 // !! 아래 두 값을 본인 Supabase 프로젝트 값으로 교체하세요 !!
 // ================================================================
 
-const SUPABASE_URL = 'https://qqisudyfktpnakldgrls.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxaXN1ZHlma3RwbmFrbGRncmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTMxOTMsImV4cCI6MjA5MTAyOTE5M30.MWir7d_xbGU2ptnddl4JCHMBudZH1LK9kmOhBl-4dSA';
+const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
 
 // Supabase JS CDN 클라이언트 (index.html 등에서 script 태그로 로드)
 // <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -388,14 +388,67 @@ async function getProductNotes() {
   return data || [];
 }
 async function upsertProductNote(product_id, { feature, caution, spec, memo }) {
-  const { error } = await sb.from('product_notes')
+  const { data, error } = await sb.from('product_notes')
     .upsert({ product_id, feature: feature||'', caution: caution||'', spec: spec||'', memo: memo||'', updated_at: new Date().toISOString() },
-             { onConflict: 'product_id' });
-  if (error) return handleError('특이사항 저장', error);
+             { onConflict: 'product_id' })
+    .select().single();
+  if (error) { handleError('특이사항 저장', error); return null; }
   showToast('저장됨');
+  return data;
 }
 async function deleteProductNote(id) {
   const { error } = await sb.from('product_notes').delete().eq('id', id);
   if (error) return handleError('특이사항 삭제', error);
   showToast('삭제됨');
+}
+
+// ================================================================
+// CATEGORIES (카테고리 관리)
+// ================================================================
+async function getCategories() {
+  const { data, error } = await sb.from('categories').select('*').order('sort_order').order('name');
+  if (error) return handleError('카테고리 조회', error) ?? [];
+  return data || [];
+}
+async function addCategory(name) {
+  const { data, error } = await sb.from('categories').insert({ name }).select().single();
+  if (error) return handleError('카테고리 추가', error);
+  showToast(`"${name}" 추가됨`);
+  return data;
+}
+async function deleteCategory(id) {
+  const { error } = await sb.from('categories').delete().eq('id', id);
+  if (error) return handleError('카테고리 삭제', error);
+  showToast('삭제됨');
+}
+async function updateCategoryOrder(id, sort_order) {
+  const { error } = await sb.from('categories').update({ sort_order }).eq('id', id);
+  if (error) return handleError('순서 변경', error);
+}
+
+// 카테고리 셀렉트를 동적으로 채우는 헬퍼
+async function fillCategorySelects(ids = []) {
+  const cats = await getCategories();
+  ids.forEach(selId => {
+    const el = document.getElementById(selId);
+    if (!el) return;
+    const cur = el.value;
+    el.innerHTML = '<option value="">전체 카테고리</option>' +
+      cats.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+    if (cur) el.value = cur;
+  });
+  return cats;
+}
+
+// 카테고리 셀렉트를 채우는 헬퍼 (전체 옵션 없음 - 등록용)
+async function fillCategorySelectsNoAll(ids = []) {
+  const cats = await getCategories();
+  ids.forEach(selId => {
+    const el = document.getElementById(selId);
+    if (!el) return;
+    const cur = el.value;
+    el.innerHTML = cats.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+    if (cur) el.value = cur;
+  });
+  return cats;
 }

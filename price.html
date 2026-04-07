@@ -68,8 +68,6 @@
         <input type="text" id="srch" placeholder="품목 검색..." style="max-width:200px" oninput="renderTable()">
         <select id="cat-f" onchange="renderTable()">
           <option value="">전체 카테고리</option>
-          <option>RFID/스티커</option><option>뮤직박스</option>
-          <option>측정기/센서</option><option>포장재</option><option>기타</option>
         </select>
         <div style="margin-left:auto;display:flex;gap:8px">
           <button class="btn btn-sm btn-danger" onclick="deleteAll()">전체 삭제</button>
@@ -303,6 +301,11 @@ async function addProd(){
   if(result){document.getElementById('s-name').value='';document.getElementById('s-cost').value='';document.getElementById('s-unit').value='1';await loadProducts();}
 }
 
+// 카테고리 동적 로드
+(async () => {
+  await fillCategorySelects(['cat-f']);
+  await fillCategorySelectsNoAll(['s-cat']);
+})();
 loadProducts();
 </script>
 </body>

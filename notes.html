@@ -101,6 +101,7 @@ mark { background:#FEF9C3; border-radius:2px; padding:0 1px; }
     <a href="inventory.html" class="nav-link">재고현황</a>
     <a href="sales.html"     class="nav-link">판매관리</a>
     <a href="report.html"    class="nav-link">보고서</a>
+    <a href="settings.html"  class="nav-link">설정</a>
     <a href="notes.html"     class="nav-link active">제품특이사항</a>
   </div>
   <div class="topbar-right"><span id="clock"></span></div>
@@ -137,11 +138,7 @@ mark { background:#FEF9C3; border-radius:2px; padding:0 1px; }
         <input type="text" id="prod-search" placeholder="품목 검색..." style="flex:1;min-width:100px;font-size:12.5px;padding:7px 10px" oninput="filterList()">
         <select id="prod-cat" style="font-size:12.5px;padding:7px 10px" onchange="filterList()">
           <option value="">전체</option>
-          <option>RFID/스티커</option>
-          <option>뮤직박스</option>
-          <option>측정기/센서</option>
-          <option>포장재</option>
-          <option>기타</option>
+          
         </select>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:10px">
@@ -381,7 +378,8 @@ async function saveNote(productId) {
     data[f.key] = el ? el.value.trim() : '';
   });
   lb(true);
-  await upsertProductNote(productId, data);
+  const result = await upsertProductNote(productId, data);
+  if (!result) { lb(false); return; }  // 저장 실패 시 중단
   // reload notes
   const noteList = await getProductNotes();
   notes = {};

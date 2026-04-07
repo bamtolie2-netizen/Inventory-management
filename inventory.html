@@ -37,6 +37,7 @@
     <a href="inventory.html" class="nav-link active">재고현황</a>
     <a href="notes.html"     class="nav-link">제품특이사항</a>
     <a href="report.html"    class="nav-link">보고서</a>
+    <a href="settings.html"  class="nav-link">설정</a>
   </div>
   <div class="topbar-right"><span id="clock"></span></div>
 </nav>
@@ -85,7 +86,7 @@
           <input type="checkbox" class="row-cb" id="ov-sel-all" onchange="ovToggleAll(this.checked)"> 전체 선택
         </label>
         <input type="text" id="ov-s" placeholder="품목 검색..." style="max-width:200px" oninput="renderOverview()">
-        <select id="ov-cat" onchange="renderOverview()"><option value="">전체 카테고리</option><option>RFID/스티커</option><option>뮤직박스</option><option>측정기/센서</option><option>포장재</option><option>기타</option></select>
+        <select id="ov-cat" onchange="renderOverview()"><option value="">전체 카테고리</option></select>
         <select id="ov-st" onchange="renderOverview()"><option value="">전체 상태</option><option value="danger">발주필요</option><option value="warn">주의</option><option value="ok">정상</option></select>
         <div style="margin-left:auto"><button class="btn btn-sm btn-danger" onclick="ovDeleteAll()">전체 삭제</button></div>
       </div>
@@ -104,7 +105,7 @@
       </div>
       <div class="filters">
         <input type="text" id="st-s" placeholder="품목 검색..." style="max-width:200px" oninput="renderStocktake()">
-        <select id="st-cat" onchange="renderStocktake()"><option value="">전체 카테고리</option><option>RFID/스티커</option><option>뮤직박스</option><option>측정기/센서</option><option>포장재</option><option>기타</option></select>
+        <select id="st-cat" onchange="renderStocktake()"><option value="">전체 카테고리</option></select>
         <select id="st-f" onchange="renderStocktake()"><option value="">전체</option><option value="diff">차이 발생</option><option value="match">일치</option><option value="empty">미입력</option></select>
       </div>
       <div class="card" style="padding:0"><div class="tbl-wrap"><table>
@@ -528,6 +529,11 @@ async function delWH(id) {
 }
 
 // Init
+// 카테고리 동적 로드
+(async () => {
+  await fillCategorySelects(['ov-cat','st-cat']);
+  await fillCategorySelectsNoAll(['s-cat']);
+})();
 loadAll().then(() => renderOverview());
 if(location.hash==='#stocktake') switchTab('stocktake',document.getElementById('tab-stocktake'));
 </script>
