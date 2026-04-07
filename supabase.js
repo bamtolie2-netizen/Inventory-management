@@ -3,8 +3,8 @@
 // !! 아래 두 값을 본인 Supabase 프로젝트 값으로 교체하세요 !!
 // ================================================================
 
-const SUPABASE_URL = 'https://qqisudyfktpnakldgrls.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxaXN1ZHlma3RwbmFrbGRncmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTMxOTMsImV4cCI6MjA5MTAyOTE5M30.MWir7d_xbGU2ptnddl4JCHMBudZH1LK9kmOhBl-4dSA';
+const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
 
 // Supabase JS CDN 클라이언트 (index.html 등에서 script 태그로 로드)
 // <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -332,4 +332,70 @@ async function getBuyerSummary(buyerName = '') {
 // 특정 날짜 판매 데이터 → 보고서용
 async function getSalesForReport(date, reportType) {
   return getSales({ date, reportType });
+}
+
+// ================================================================
+// PRODUCT DETAIL (품목 통합 조회)
+// ================================================================
+
+// 단일 품목 전체 정보 조회 (단가 + 재고 + 판매이력)
+async function getProductDetail(id) {
+  const [prodRes, priceRes, stockRes, salesRes] = await Promise.all([
+    sb.from('products').select('*').eq('id', id).single(),
+    sb.from('channel_prices').select('*').eq('product_id', id),
+    sb.from('stock').select('*, warehouses(name, manager)').eq('product_id', id),
+    sb.from('sales').select('*').ilike('product_name', `%${id}%`).order('sold_at', { ascending: false }).limit(50),
+  ]);
+  if (prodRes.error) return handleError('품목 상세 조회', prodRes.error);
+  const p = prodRes.data;
+  const prices = {};
+  (priceRes.data || []).forEach(x => { prices[x.channel] = x.price; });
+  const stockMap = {};
+  (stockRes.data || []).forEach(x => { stockMap[x.warehouse_id] = { qty: x.quantity, name: x.warehouses?.name || '', manager: x.warehouses?.manager || '' }; });
+  return { ...p, prices, stockDetail: stockMap };
+}
+
+// 품목 위치 업데이트
+async function updateProductLocation(id, location) {
+  const { error } = await sb.from('products').update({ location, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) return handleError('위치 수정', error);
+  showToast('위치 저장됨');
+}
+
+// 품목 기본정보 업데이트
+async function updateProductInfo(id, fields) {
+  const { error } = await sb.from('products').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) return handleError('품목 정보 수정', error);
+  showToast('저장됨');
+}
+
+// 특정 품목 판매이력 (이름으로 조회)
+async function getSalesByProductName(name, limit = 30) {
+  const { data, error } = await sb.from('sales').select('*')
+    .ilike('product_name', `%${name}%`)
+    .order('sold_at', { ascending: false })
+    .limit(limit);
+  if (error) return handleError('품목 판매이력 조회', error);
+  return data || [];
+}
+
+// ================================================================
+// PRODUCT NOTES (제품 특이사항)
+// ================================================================
+async function getProductNotes() {
+  const { data, error } = await sb.from('product_notes').select('*, products(name, category)').order('updated_at', { ascending: false });
+  if (error) return handleError('특이사항 조회', error) ?? [];
+  return data || [];
+}
+async function upsertProductNote(product_id, { feature, caution, spec, memo }) {
+  const { error } = await sb.from('product_notes')
+    .upsert({ product_id, feature: feature||'', caution: caution||'', spec: spec||'', memo: memo||'', updated_at: new Date().toISOString() },
+             { onConflict: 'product_id' });
+  if (error) return handleError('특이사항 저장', error);
+  showToast('저장됨');
+}
+async function deleteProductNote(id) {
+  const { error } = await sb.from('product_notes').delete().eq('id', id);
+  if (error) return handleError('특이사항 삭제', error);
+  showToast('삭제됨');
 }

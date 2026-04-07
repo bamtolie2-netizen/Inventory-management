@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>제품 특이사항 — 재고&단가 관리</title>
+<link rel="stylesheet" href="shared.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase.js"></script>
+<style>
+/* ── 레이아웃: 왼쪽 목록 + 오른쪽 에디터 ── */
+.notes-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media(max-width:860px){ .notes-layout { grid-template-columns:1fr; } }
+
+/* ── 품목 목록 ── */
+.prod-list { position:sticky; top:calc(var(--top-h) + 16px); }
+.prod-item {
+  display:flex; align-items:center; gap:10px;
+  padding:10px 13px; border:1px solid var(--border);
+  border-radius:var(--radius); margin-bottom:6px;
+  cursor:pointer; transition:all .15s; background:var(--surface);
+}
+.prod-item:hover { border-color:var(--border2); background:var(--bg); }
+.prod-item.active { border-color:var(--accent); background:var(--accent-bg); }
+.prod-item.has-note .prod-dot { background:var(--green); }
+.prod-dot { width:8px; height:8px; border-radius:50%; background:var(--border2); flex-shrink:0; }
+.prod-name { font-size:13px; font-weight:600; flex:1; line-height:1.3; }
+.prod-cat  { font-size:11px; color:var(--text3); }
+.note-badge { font-size:10px; padding:2px 6px; border-radius:20px; background:var(--green-bg); color:var(--green); border:1px solid var(--green-bd); font-weight:600; flex-shrink:0; }
+
+/* ── 에디터 패널 ── */
+.editor-empty {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:80px 20px; color:var(--text3);
+  border:2px dashed var(--border); border-radius:var(--radius-lg);
+  background:var(--bg); min-height:360px;
+}
+.editor-empty-title { font-size:15px; font-weight:600; margin-bottom:8px; color:var(--text2); }
+.editor-empty-sub   { font-size:13px; }
+
+/* ── 노트 섹션 ── */
+.note-section { margin-bottom:14px; }
+.note-label {
+  display:flex; align-items:center; gap:8px;
+  font-size:11px; font-weight:700; color:var(--text3);
+  text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;
+}
+.note-label-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.note-textarea {
+  width:100%; font-family:var(--sans); font-size:13.5px; line-height:1.75;
+  padding:10px 13px; border:1px solid var(--border2); border-radius:var(--radius);
+  background:var(--surface); color:var(--text1); resize:vertical; min-height:80px;
+  transition:border-color .15s;
+}
+.note-textarea:focus { outline:none; border-color:var(--accent); }
+.note-textarea.filled { border-color:var(--green-bd); background:var(--green-bg); }
+.note-textarea.filled:focus { border-color:var(--accent); background:var(--surface); }
+
+/* ── 카드 뷰 (읽기 모드) ── */
+.note-card-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+@media(max-width:600px){ .note-card-grid { grid-template-columns:1fr; } }
+.note-card {
+  border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px;
+  background:var(--surface);
+}
+.note-card-label { font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+.note-card-dot { width:7px; height:7px; border-radius:50%; }
+.note-card-content { font-size:13px; line-height:1.7; color:var(--text1); white-space:pre-wrap; }
+.note-card-empty { font-size:12px; color:var(--text3); font-style:italic; }
+
+/* ── 검색 강조 ── */
+mark { background:#FEF9C3; border-radius:2px; padding:0 1px; }
+
+/* ── 최근 수정 배지 ── */
+.updated-badge { font-size:11px; color:var(--text3); }
+
+/* ── 전체 검색 결과 ── */
+.search-result-item {
+  border:1px solid var(--border); border-radius:var(--radius-lg);
+  padding:14px 16px; margin-bottom:10px; cursor:pointer; transition:all .15s;
+  background:var(--surface);
+}
+.search-result-item:hover { border-color:var(--border2); box-shadow:0 2px 8px rgba(0,0,0,.06); }
+.search-result-name { font-size:14px; font-weight:700; margin-bottom:4px; }
+.search-result-excerpt { font-size:12.5px; color:var(--text2); line-height:1.6; }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="index.html" class="logo">재고<em>&</em>단가</a>
+  <div class="nav-links">
+    <a href="index.html"     class="nav-link">대시보드</a>
+    <a href="price.html"     class="nav-link">단가표</a>
+    <a href="inventory.html" class="nav-link">재고현황</a>
+    <a href="sales.html"     class="nav-link">판매관리</a>
+    <a href="report.html"    class="nav-link">보고서</a>
+    <a href="notes.html"     class="nav-link active">제품특이사항</a>
+  </div>
+  <div class="topbar-right"><span id="clock"></span></div>
+</nav>
+
+<div id="loading-bar"></div>
+<div class="toast" id="toast"></div>
+
+<div class="page"><div class="page-inner">
+
+  <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px">
+    <div>
+      <div class="page-title">제품 특이사항</div>
+      <div class="page-sub">제품별 특징 · 주의사항 · 규격 · 메모 통합 관리</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="global-search" placeholder="전체 검색..." style="max-width:220px" oninput="onGlobalSearch()">
+      <span style="font-size:12px;color:var(--text3)" id="note-count"></span>
+    </div>
+  </div>
+
+  <!-- 전체 검색 결과 -->
+  <div id="search-results" style="display:none">
+    <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text2)" id="search-result-label"></div>
+    <div id="search-result-list"></div>
+  </div>
+
+  <!-- 메인 레이아웃 -->
+  <div class="notes-layout" id="main-layout">
+
+    <!-- 왼쪽: 품목 목록 -->
+    <div class="prod-list">
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        <input type="text" id="prod-search" placeholder="품목 검색..." style="flex:1;min-width:100px;font-size:12.5px;padding:7px 10px" oninput="filterList()">
+        <select id="prod-cat" style="font-size:12.5px;padding:7px 10px" onchange="filterList()">
+          <option value="">전체</option>
+          <option>RFID/스티커</option>
+          <option>뮤직박스</option>
+          <option>측정기/센서</option>
+          <option>포장재</option>
+          <option>기타</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;color:var(--text2)">
+          <input type="checkbox" id="only-noted" onchange="filterList()"> 메모 있는 것만
+        </label>
+        <span style="margin-left:auto;font-size:12px;color:var(--text3)" id="list-count"></span>
+      </div>
+      <div id="prod-list-el"></div>
+    </div>
+
+    <!-- 오른쪽: 에디터 -->
+    <div id="editor-panel">
+      <div class="editor-empty" id="editor-empty">
+        <div class="editor-empty-title">왼쪽에서 제품을 선택하세요</div>
+        <div class="editor-empty-sub">클릭하면 특이사항을 입력할 수 있습니다</div>
+      </div>
+      <div id="editor-content" style="display:none"></div>
+    </div>
+
+  </div>
+</div></div>
+
+<script>
+(function tick(){
+  document.getElementById('clock').textContent =
+    new Date().toLocaleString('ko-KR',{month:'short',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});
+  setTimeout(tick, 30000);
+})();
+
+let products = [];
+let notes = {};        // { product_id: noteObj }
+let selectedId = null;
+let editMode = false;
+
+const NOTE_FIELDS = [
+  { key:'feature',  label:'제품 특징',   color:'#2563EB', placeholder:'예) RFID 125Khz 지원, 방수 처리, 최대 인식거리 10cm' },
+  { key:'caution',  label:'주의사항',    color:'#DC2626', placeholder:'예) 직사광선 보관 금지, 습기에 약함, 금속 표면 부착 불가' },
+  { key:'spec',     label:'규격 / 스펙', color:'#7C3AED', placeholder:'예) 18mm × 18mm, 두께 0.3mm, 동작온도 -20~60℃' },
+  { key:'memo',     label:'기타 메모',   color:'#B45309', placeholder:'예) 중국산, 납기 2주, 주문 단위 100개, 담당: 철호' },
+];
+
+function lb(on){
+  const b=document.getElementById('loading-bar');
+  if(on){b.style.width='60%';b.style.opacity='1';}
+  else{b.style.width='100%';setTimeout(()=>{b.classList.add('done');setTimeout(()=>{b.style.width='0%';b.classList.remove('done');},300);},200);}
+}
+
+// ──────────────────────────────────────────────
+// LOAD
+// ──────────────────────────────────────────────
+async function init() {
+  lb(true);
+  const [prods, noteList] = await Promise.all([
+    getProductsWithPrices(),
+    getProductNotes(),
+  ]);
+  lb(false);
+
+  products = prods;
+  notes = {};
+  noteList.forEach(n => { notes[n.product_id] = n; });
+
+  const total = noteList.length;
+  document.getElementById('note-count').textContent = `특이사항 등록: ${total}건`;
+
+  renderList();
+}
+
+// ──────────────────────────────────────────────
+// LIST
+// ──────────────────────────────────────────────
+function filterList() { renderList(); }
+
+function renderList() {
+  const q         = document.getElementById('prod-search').value.toLowerCase();
+  const cat       = document.getElementById('prod-cat').value;
+  const onlyNoted = document.getElementById('only-noted').checked;
+
+  const filtered = products.filter(p => {
+    if (q && !p.name.toLowerCase().includes(q)) return false;
+    if (cat && p.category !== cat) return false;
+    if (onlyNoted && !notes[p.id]) return false;
+    return true;
+  });
+
+  document.getElementById('list-count').textContent = `${filtered.length}개`;
+
+  const el = document.getElementById('prod-list-el');
+  el.innerHTML = filtered.map(p => {
+    const hasNote = !!notes[p.id];
+    const n = notes[p.id];
+    const filled = n ? [n.feature,n.caution,n.spec,n.memo].filter(Boolean).length : 0;
+    const s = totalStock(p);
+    const stColor = s<=10?'var(--red)':s<=20?'var(--amber)':'var(--text3)';
+    return `<div class="prod-item ${hasNote?'has-note':''} ${selectedId===p.id?'active':''}" onclick="selectProduct(${p.id})">
+      <div class="prod-dot"></div>
+      <div style="flex:1;min-width:0">
+        <div class="prod-name">${p.name}</div>
+        <div class="prod-cat">${p.category} · ${p.type}</div>
+      </div>
+      ${hasNote ? `<span class="note-badge">${filled}개 항목</span>` : ''}
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:13px;font-weight:700;font-family:var(--mono);color:${stColor}">${s}</div>
+        <div style="font-size:10px;color:var(--text3)">재고</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ──────────────────────────────────────────────
+// SELECT PRODUCT
+// ──────────────────────────────────────────────
+function selectProduct(id) {
+  selectedId = id;
+  editMode = false;
+  renderList();
+  renderEditor();
+}
+
+function renderEditor() {
+  const p = products.find(x => x.id === selectedId);
+  if (!p) return;
+  const n = notes[p.id] || {};
+  const hasAny = NOTE_FIELDS.some(f => n[f.key]);
+
+  document.getElementById('editor-empty').style.display = 'none';
+  document.getElementById('editor-content').style.display = 'block';
+
+  const s = totalStock(p);
+  const stBadge = s<=10?'badge-danger':s<=20?'badge-warn':'badge-ok';
+  const stLabel = s<=10?'발주필요':s<=20?'주의':'정상';
+
+  const updatedStr = n.updated_at
+    ? new Date(n.updated_at).toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'}) + ' 수정'
+    : '미등록';
+
+  document.getElementById('editor-content').innerHTML = `
+    <!-- 헤더 -->
+    <div class="card">
+      <div class="card-body">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:18px;font-weight:700;margin-bottom:6px">${p.name}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <span class="badge badge-gray">${p.category}</span>
+              <span class="badge ${p.type==='국내'?'badge-info':'badge-purple'}">${p.type}</span>
+              <span class="badge ${stBadge}">재고 ${s}개 · ${stLabel}</span>
+              <span class="badge badge-gray">원가 ${unitPrice(p).toLocaleString()}원</span>
+              ${n.updated_at ? `<span class="updated-badge">· ${updatedStr}</span>` : ''}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px">
+            ${editMode
+              ? `<button class="btn btn-sm btn-danger" onclick="cancelEdit()">취소</button>
+                 <button class="btn btn-sm btn-primary" onclick="saveNote(${p.id})">저장</button>`
+              : `<button class="btn btn-sm" onclick="startEdit()">편집</button>
+                 ${hasAny ? `<button class="btn btn-sm btn-danger" onclick="deleteNote(${p.id})">삭제</button>` : ''}`
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 특이사항 섹션 -->
+    <div class="card">
+      <div class="card-body">
+        ${editMode ? renderEditForm(n) : renderViewCards(n, p.name)}
+      </div>
+    </div>
+  `;
+}
+
+function renderViewCards(n, name) {
+  const hasAny = NOTE_FIELDS.some(f => n[f.key]);
+  if (!hasAny) {
+    return `<div style="text-align:center;padding:32px 0;color:var(--text3)">
+      <div style="font-size:28px;margin-bottom:10px;opacity:.4">📝</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:6px">등록된 특이사항이 없습니다</div>
+      <div style="font-size:13px">편집 버튼을 눌러 특징, 주의사항 등을 입력하세요</div>
+    </div>`;
+  }
+  return `<div class="note-card-grid">
+    ${NOTE_FIELDS.map(f => {
+      const val = n[f.key] || '';
+      return `<div class="note-card">
+        <div class="note-card-label">
+          <div class="note-card-dot" style="background:${f.color}"></div>
+          ${f.label}
+        </div>
+        ${val
+          ? `<div class="note-card-content">${escHtml(val)}</div>`
+          : `<div class="note-card-empty">미입력</div>`
+        }
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function renderEditForm(n) {
+  return `<div>
+    ${NOTE_FIELDS.map(f => `
+      <div class="note-section">
+        <div class="note-label">
+          <div class="note-label-dot" style="background:${f.color}"></div>
+          ${f.label}
+        </div>
+        <textarea class="note-textarea ${n[f.key]?'filled':''}" id="nf-${f.key}"
+          placeholder="${f.placeholder}"
+          oninput="this.classList.toggle('filled', !!this.value)"
+          rows="3">${escHtml(n[f.key]||'')}</textarea>
+      </div>
+    `).join('')}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button class="btn btn-sm btn-danger" onclick="cancelEdit()">취소</button>
+      <button class="btn btn-sm btn-primary" onclick="saveNote(${selectedId})">저장</button>
+    </div>
+  </div>`;
+}
+
+function startEdit() {
+  editMode = true;
+  renderEditor();
+  // auto-focus first field
+  setTimeout(() => document.getElementById('nf-feature')?.focus(), 50);
+}
+
+function cancelEdit() {
+  editMode = false;
+  renderEditor();
+}
+
+async function saveNote(productId) {
+  const data = {};
+  NOTE_FIELDS.forEach(f => {
+    const el = document.getElementById('nf-'+f.key);
+    data[f.key] = el ? el.value.trim() : '';
+  });
+  lb(true);
+  await upsertProductNote(productId, data);
+  // reload notes
+  const noteList = await getProductNotes();
+  notes = {};
+  noteList.forEach(n => { notes[n.product_id] = n; });
+  lb(false);
+  editMode = false;
+  const total = noteList.length;
+  document.getElementById('note-count').textContent = `특이사항 등록: ${total}건`;
+  renderList();
+  renderEditor();
+}
+
+async function deleteNote(productId) {
+  const n = notes[productId];
+  if (!n) return;
+  if (!confirm('이 제품의 특이사항을 모두 삭제하시겠습니까?')) return;
+  lb(true);
+  await deleteProductNote(n.id);
+  const noteList = await getProductNotes();
+  notes = {};
+  noteList.forEach(n => { notes[n.product_id] = n; });
+  lb(false);
+  const total = noteList.length;
+  document.getElementById('note-count').textContent = `특이사항 등록: ${total}건`;
+  renderList();
+  renderEditor();
+}
+
+// ──────────────────────────────────────────────
+// 전체 검색
+// ──────────────────────────────────────────────
+function onGlobalSearch() {
+  const q = document.getElementById('global-search').value.trim().toLowerCase();
+  const mainLayout = document.getElementById('main-layout');
+  const searchResults = document.getElementById('search-results');
+
+  if (!q) {
+    mainLayout.style.display = '';
+    searchResults.style.display = 'none';
+    return;
+  }
+
+  mainLayout.style.display = 'none';
+  searchResults.style.display = 'block';
+
+  const results = [];
+  products.forEach(p => {
+    const n = notes[p.id];
+    if (!n) return;
+    const fields = NOTE_FIELDS.map(f => ({ label: f.label, color: f.color, val: n[f.key]||'' }));
+    const matched = fields.filter(f => f.val.toLowerCase().includes(q));
+    if (p.name.toLowerCase().includes(q) || matched.length > 0) {
+      results.push({ p, matched, allFields: fields });
+    }
+  });
+
+  document.getElementById('search-result-label').textContent = `"${q}" 검색 결과 — ${results.length}건`;
+
+  if (!results.length) {
+    document.getElementById('search-result-list').innerHTML = '<div class="empty">검색 결과가 없습니다.</div>';
+    return;
+  }
+
+  document.getElementById('search-result-list').innerHTML = results.map(({ p, matched, allFields }) => {
+    const excerpts = matched.map(f => {
+      const hl = f.val.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'), m => `<mark>${m}</mark>`);
+      return `<div style="margin-bottom:4px"><span style="font-size:10px;font-weight:700;color:${f.color};text-transform:uppercase;letter-spacing:.3px">${f.label}</span><br><span style="font-size:12.5px">${hl}</span></div>`;
+    }).join('');
+    const nameHL = p.name.toLowerCase().includes(q)
+      ? p.name.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'), m => `<mark>${m}</mark>`)
+      : p.name;
+    return `<div class="search-result-item" onclick="goToProduct(${p.id})">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div class="search-result-name">${nameHL}</div>
+        <span class="badge badge-gray">${p.category}</span>
+        <span class="badge ${p.type==='국내'?'badge-info':'badge-purple'}">${p.type}</span>
+      </div>
+      <div class="search-result-excerpt">${excerpts || '<span style="color:var(--text3);font-size:12px">품목명 일치</span>'}</div>
+    </div>`;
+  }).join('');
+}
+
+function goToProduct(id) {
+  // clear search and go to product
+  document.getElementById('global-search').value = '';
+  document.getElementById('search-results').style.display = 'none';
+  document.getElementById('main-layout').style.display = '';
+  // clear filters
+  document.getElementById('prod-search').value = '';
+  document.getElementById('prod-cat').value = '';
+  document.getElementById('only-noted').checked = false;
+  selectedId = id;
+  editMode = false;
+  renderList();
+  renderEditor();
+  // scroll to top
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ──────────────────────────────────────────────
+// UTILS
+// ──────────────────────────────────────────────
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+init();
+</script>
+</body>
+</html>
