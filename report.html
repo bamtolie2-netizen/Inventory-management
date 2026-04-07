@@ -529,6 +529,61 @@ function renderQuickStats(){
 // ──────────────────────────────────────────────
 // INIT
 // ──────────────────────────────────────────────
+// ──────────────────────────────────────────────
+// 판매관리 데이터 불러오기
+// ──────────────────────────────────────────────
+async function importFromSales(reportType) {
+  lb(true);
+  const date = NOW.toISOString().slice(0,10);
+  const rows = await getSalesForReport(date, reportType);
+  lb(false);
+
+  if (!rows.length) {
+    showToast(`판매관리에 저장된 ${reportType==='morning'?'출근':'퇴근'} 데이터가 없습니다`, 'error');
+    return;
+  }
+
+  if (reportType === 'morning') {
+    // 채널별로 morningData에 채워넣기
+    CHANNELS.forEach(ch => { morningData[ch.key] = []; });
+    rows.forEach(r => {
+      if (!morningData[r.channel]) morningData[r.channel] = [];
+      morningData[r.channel].push({
+        tempId: ++window._tid || (window._tid = 1),
+        name: r.buyer_name || '',
+        item: r.product_name || '',
+        qty: r.quantity || '',
+        note: r.note || '',
+        savedId: r.id,
+      });
+    });
+    initMorning();
+    showToast(`출근 보고 ${rows.length}건 불러옴 — 자동 생성 버튼을 눌러주세요`);
+  } else {
+    // 퇴근 — 품목별로 eveningData에 합산
+    const byProduct = {};
+    rows.forEach(r => {
+      const key = r.product_name;
+      if (!byProduct[key]) byProduct[key] = { qty:0, notes:[] };
+      byProduct[key].qty += r.quantity;
+      if (r.note) byProduct[key].notes.push(r.note);
+    });
+    // 기타 카테고리에 병합
+    const importedItems = Object.entries(byProduct).map(([name, d]) => ({
+      name, qty: d.qty, note: d.notes.join(', ')
+    }));
+    // eveningData 마지막 카테고리(기타)에 추가하거나 새 카테고리로
+    const importCat = eveningData.find(c => c.catName.includes('판매관리'));
+    if (importCat) {
+      importCat.items = importedItems;
+    } else {
+      eveningData.push({ catName: `판매관리 불러오기 (${date})`, items: importedItems });
+    }
+    renderEveningCats();
+    showToast(`퇴근 보고 ${rows.length}건 불러옴 — 자동 생성 버튼을 눌러주세요`);
+  }
+}
+
 async function loadData(){
   lb(true);
   [products,,sessions]=await Promise.all([getProductsWithPrices(),getWarehouses(),getSessions()]);

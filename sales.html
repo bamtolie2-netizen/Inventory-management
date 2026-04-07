@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>판매관리 — 재고&단가 관리</title>
+<link rel="stylesheet" href="shared.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase.js"></script>
+<style>
+/* ── 채널 블록 ── */
+.ch-block{border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:10px;overflow:hidden}
+.ch-block-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg);cursor:pointer;user-select:none;transition:background .15s}
+.ch-block-hd:hover{background:var(--bg2)}
+.ch-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ch-name{font-size:13px;font-weight:600;flex:1}
+.ch-stat{font-size:12px;color:var(--text3);font-family:var(--mono)}
+.ch-arr{font-size:11px;color:var(--text3);transition:transform .2s}
+.ch-body{display:none;padding:10px 14px;border-top:1px solid var(--border);background:var(--surface)}
+.ch-body.open{display:block}
+
+/* ── 판매 행 입력 ── */
+.sale-row{display:grid;grid-template-columns:110px 1fr 60px 1fr 28px;gap:5px;align-items:center;margin-bottom:5px}
+.sale-row input{font-size:12.5px;padding:6px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1);width:100%}
+.sale-row input:focus{outline:none;border-color:var(--accent)}
+.sale-row input.saved{border-color:var(--green-bd);background:var(--green-bg)}
+.add-row-btn{font-size:11.5px;padding:4px 10px;border:1px dashed var(--border2);border-radius:6px;cursor:pointer;background:none;color:var(--text3);margin-top:4px}
+.add-row-btn:hover{background:var(--bg);color:var(--text1)}
+.del-btn{width:24px;height:24px;border:none;background:none;cursor:pointer;color:var(--text3);font-size:16px;display:flex;align-items:center;justify-content:center;border-radius:4px;flex-shrink:0}
+.del-btn:hover{background:var(--red-bg);color:var(--red)}
+.save-ch-btn{font-size:11.5px;padding:5px 12px;border:1px solid var(--green-bd);border-radius:6px;cursor:pointer;background:var(--green-bg);color:var(--green);margin-top:6px;font-weight:500}
+.save-ch-btn:hover{background:#dcfce7}
+
+/* ── 이력 테이블 ── */
+.hist-date-group{margin-bottom:16px}
+.hist-date-label{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.hist-date-badge{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--bg2);color:var(--text2);font-weight:500}
+
+/* ── 구매자 카드 ── */
+.buyer-card{border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:all .15s}
+.buyer-card:hover{border-color:var(--border2);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.buyer-card.open{border-color:var(--accent);background:var(--accent-bg)}
+.buyer-name{font-size:14px;font-weight:600}
+.buyer-meta{font-size:12px;color:var(--text3);margin-top:3px}
+.buyer-detail{display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.buyer-detail.open{display:block}
+
+/* ── 통계 칩 ── */
+.stat-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.stat-chip{font-size:12px;padding:4px 10px;border-radius:20px;background:var(--bg2);color:var(--text2);border:1px solid var(--border)}
+
+/* ── 상단 요약 ── */
+.today-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+@media(max-width:700px){.today-summary{grid-template-columns:1fr 1fr}}
+.sum-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.sum-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.sum-val{font-size:22px;font-weight:700;letter-spacing:-1px}
+.sum-note{font-size:11px;color:var(--text3);margin-top:3px}
+
+/* ── 검색 강조 ── */
+.highlight{background:#FEF9C3;border-radius:2px}
+</style>
+</head>
+<body>
+<nav class="topbar">
+  <a href="index.html" class="logo">재고<em>&</em>단가</a>
+  <div class="nav-links">
+    <a href="index.html"     class="nav-link">대시보드</a>
+    <a href="price.html"     class="nav-link">단가표</a>
+    <a href="inventory.html" class="nav-link">재고현황</a>
+    <a href="sales.html"     class="nav-link active">판매관리</a>
+    <a href="report.html"    class="nav-link">보고서</a>
+  </div>
+  <div class="topbar-right"><span id="clock"></span></div>
+</nav>
+<div id="loading-bar"></div>
+<div class="toast" id="toast"></div>
+
+<div class="page"><div class="page-inner">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:20px">
+    <div>
+      <div class="page-title">판매관리</div>
+      <div class="page-sub">채널별 주문 입력 · 판매 이력 조회 · 구매자 통계</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <input type="date" id="work-date" style="font-size:13px;padding:7px 10px">
+      <select id="report-type-sel" style="font-size:13px;padding:7px 10px">
+        <option value="morning">출근 보고</option>
+        <option value="evening">퇴근 보고</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- 오늘 요약 -->
+  <div class="today-summary" id="today-summary"></div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('input',this)">판매 입력</div>
+    <div class="tab" onclick="switchTab('history',this)">판매 이력</div>
+    <div class="tab" onclick="switchTab('buyer',this)">구매자 조회</div>
+  </div>
+
+  <!-- ═══ 판매 입력 ═══ -->
+  <div id="pane-input">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <span style="font-size:13px;color:var(--text2)">채널을 펼쳐서 주문 내역을 입력하세요. 입력 후 채널별 "저장" 버튼을 누르면 DB에 저장됩니다.</span>
+      <button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="saveAll()">전체 저장</button>
+    </div>
+    <div id="input-channels"></div>
+    <div style="margin-top:12px;padding:12px 16px;background:var(--bg);border-radius:var(--radius);font-size:12.5px;color:var(--text3)">
+      저장된 데이터는 보고서 페이지에서 자동으로 불러옵니다.
+    </div>
+  </div>
+
+  <!-- ═══ 판매 이력 ═══ -->
+  <div id="pane-history" style="display:none">
+    <div class="filters">
+      <input type="text" id="hist-buyer" placeholder="구매자 이름 검색..." style="max-width:180px" oninput="searchHistory()">
+      <select id="hist-channel" onchange="searchHistory()">
+        <option value="">전체 채널</option>
+      </select>
+      <input type="date" id="hist-from" onchange="searchHistory()">
+      <span style="font-size:13px;color:var(--text3)">~</span>
+      <input type="date" id="hist-to" onchange="searchHistory()">
+      <button class="btn btn-sm" onclick="clearHistFilter()">초기화</button>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <span style="font-size:12px;color:var(--text3);align-self:center" id="hist-result-count"></span>
+        <button class="btn btn-sm btn-danger" id="hist-del-sel-btn" style="display:none" onclick="deleteSelectedHist()">선택 삭제</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteAllVisible()">전체 삭제</button>
+      </div>
+    </div>
+
+    <!-- Bulk bar -->
+    <div class="bulk-bar" id="hist-bulk-bar">
+      <span class="count" id="hist-bulk-count">0개 선택</span>
+      <button class="btn-bulk danger" onclick="deleteSelectedHist()">선택 삭제</button>
+      <button class="btn-bulk" onclick="clearHistSel()" style="margin-left:auto">선택 해제</button>
+    </div>
+
+    <div id="history-list"></div>
+  </div>
+
+  <!-- ═══ 구매자 조회 ═══ -->
+  <div id="pane-buyer" style="display:none">
+    <div class="filters">
+      <input type="text" id="buyer-search" placeholder="구매자 이름 검색..." style="max-width:220px" oninput="searchBuyer()">
+      <select id="buyer-channel-filter" onchange="searchBuyer()">
+        <option value="">전체 채널</option>
+      </select>
+      <span style="font-size:12px;color:var(--text3);margin-left:4px" id="buyer-result-count"></span>
+    </div>
+    <div id="buyer-list"></div>
+  </div>
+
+</div></div>
+
+<script>
+(function tick(){document.getElementById('clock').textContent=new Date().toLocaleString('ko-KR',{month:'short',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});setTimeout(tick,30000);})();
+
+const TODAY = new Date().toISOString().slice(0,10);
+document.getElementById('work-date').value = TODAY;
+
+// 날짜가 바뀌면 입력 탭 재렌더
+document.getElementById('work-date').addEventListener('change', () => renderInputChannels());
+document.getElementById('report-type-sel').addEventListener('change', () => renderInputChannels());
+
+// inputData: { chKey: [ {name, product, qty, note, tempId} ] }
+const inputData = {};
+CHANNELS.forEach(ch => { inputData[ch.key] = []; });
+let tempId = 0;
+
+const histSel = new Set();
+let histRows = []; // 현재 로드된 이력
+let allBuyerData = [];
+
+function lb(on){const b=document.getElementById('loading-bar');if(on){b.style.width='60%';b.style.opacity='1';}else{b.style.width='100%';setTimeout(()=>{b.classList.add('done');setTimeout(()=>{b.style.width='0%';b.classList.remove('done');},300);},200);}};
+
+// ──────────────────────────────────────────────
+// TAB
+// ──────────────────────────────────────────────
+function switchTab(id, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['input','history','buyer'].forEach(p => {
+    document.getElementById('pane-'+p).style.display = p===id ? 'block' : 'none';
+  });
+  if (id === 'history') loadHistory();
+  if (id === 'buyer')   loadBuyers();
+}
+
+// ──────────────────────────────────────────────
+// 오늘 요약
+// ──────────────────────────────────────────────
+async function loadSummary() {
+  const date = document.getElementById('work-date').value || TODAY;
+  const rows = await getSales({ date });
+  const totalQty = rows.reduce((a,r) => a + r.quantity, 0);
+  const buyers = new Set(rows.map(r => r.buyer_name).filter(Boolean));
+  const channels = new Set(rows.map(r => r.channel));
+  document.getElementById('today-summary').innerHTML = `
+    <div class="sum-card"><div class="sum-label">총 주문 건수</div><div class="sum-val">${rows.length}</div><div class="sum-note">${date} 기준</div></div>
+    <div class="sum-card"><div class="sum-label">총 판매 수량</div><div class="sum-val">${totalQty}</div><div class="sum-note">개</div></div>
+    <div class="sum-card"><div class="sum-label">구매자 수</div><div class="sum-val">${buyers.size}</div><div class="sum-note">명</div></div>
+    <div class="sum-card"><div class="sum-label">활성 채널</div><div class="sum-val">${channels.size}</div><div class="sum-note">/ ${CHANNELS.length}개</div></div>
+  `;
+}
+
+// ──────────────────────────────────────────────
+// 판매 입력
+// ──────────────────────────────────────────────
+function renderInputChannels() {
+  const el = document.getElementById('input-channels');
+  el.innerHTML = CHANNELS.map(ch => {
+    const rows = inputData[ch.key];
+    const savedCount = rows.filter(r => r.savedId).length;
+    const total = rows.reduce((a,r) => a+(parseInt(r.qty)||0), 0);
+    const stat = total ? `${total}개 입력` : '입력없음';
+    return `<div class="ch-block" id="chb-${ch.key}">
+      <div class="ch-block-hd" onclick="toggleCh('${ch.key}')">
+        <div class="ch-dot" style="background:${ch.color}"></div>
+        <div class="ch-name">${ch.label}</div>
+        <div class="ch-stat" id="chstat-${ch.key}">${stat}</div>
+        <div class="ch-arr" id="charr-${ch.key}">▼</div>
+      </div>
+      <div class="ch-body" id="chbody-${ch.key}">
+        <div style="display:grid;grid-template-columns:110px 1fr 60px 1fr 28px;gap:5px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;padding:0 2px;margin-bottom:6px">
+          <span>구매자 이름</span><span>품목명</span><span style="text-align:right">수량</span><span>비고</span><span></span>
+        </div>
+        <div id="chrows-${ch.key}">
+          ${rows.map(r => saleRowHTML(ch.key, r)).join('')}
+        </div>
+        <button class="add-row-btn" onclick="addRow('${ch.key}')">+ 주문자 추가</button>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="save-ch-btn" onclick="saveCh('${ch.key}')">이 채널 저장</button>
+          <button class="btn btn-sm btn-danger" onclick="clearCh('${ch.key}')" style="font-size:11px">초기화</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function saleRowHTML(chKey, r) {
+  const cls = r.savedId ? 'saved' : '';
+  return `<div class="sale-row" id="srow-${r.tempId}">
+    <input placeholder="구매자 이름" value="${r.name||''}" class="${cls}" oninput="setRow('${chKey}',${r.tempId},'name',this.value)">
+    <input placeholder="품목명" value="${r.product||''}" class="${cls}" oninput="setRow('${chKey}',${r.tempId},'product',this.value)">
+    <input type="number" placeholder="0" min="0" value="${r.qty||''}" class="${cls}" style="text-align:right" oninput="setRow('${chKey}',${r.tempId},'qty',this.value)">
+    <input placeholder="비고" value="${r.note||''}" class="${cls}" oninput="setRow('${chKey}',${r.tempId},'note',this.value)">
+    <button class="del-btn" onclick="delRow('${chKey}',${r.tempId})" title="삭제">×</button>
+  </div>`;
+}
+
+function toggleCh(key) {
+  const body = document.getElementById('chbody-'+key);
+  const arr  = document.getElementById('charr-'+key);
+  body.classList.toggle('open');
+  arr.textContent = body.classList.contains('open') ? '▲' : '▼';
+}
+
+function addRow(chKey) {
+  const row = { tempId: ++tempId, name:'', product:'', qty:'', note:'', savedId: null };
+  inputData[chKey].push(row);
+  const el = document.getElementById('chrows-'+chKey);
+  el.insertAdjacentHTML('beforeend', saleRowHTML(chKey, row));
+  // open block
+  const body = document.getElementById('chbody-'+chKey);
+  const arr  = document.getElementById('charr-'+chKey);
+  if (!body.classList.contains('open')) { body.classList.add('open'); arr.textContent='▲'; }
+}
+
+function setRow(chKey, tid, field, val) {
+  const r = inputData[chKey].find(x => x.tempId === tid);
+  if (r) {
+    r[field] = val;
+    r.savedId = null; // 수정하면 저장 상태 해제
+    // remove saved style
+    const inp = document.querySelector(`#srow-${tid} input`);
+    document.querySelectorAll(`#srow-${tid} input`).forEach(i => i.classList.remove('saved'));
+    updateChStat(chKey);
+  }
+}
+
+function delRow(chKey, tid) {
+  inputData[chKey] = inputData[chKey].filter(x => x.tempId !== tid);
+  document.getElementById('srow-'+tid)?.remove();
+  updateChStat(chKey);
+}
+
+function clearCh(chKey) {
+  if (!confirm(`${CHANNELS.find(c=>c.key===chKey)?.label} 입력 내용을 초기화하시겠습니까?`)) return;
+  inputData[chKey] = [];
+  document.getElementById('chrows-'+chKey).innerHTML = '';
+  updateChStat(chKey);
+}
+
+function updateChStat(chKey) {
+  const rows = inputData[chKey];
+  const total = rows.reduce((a,r) => a+(parseInt(r.qty)||0), 0);
+  const el = document.getElementById('chstat-'+chKey);
+  if (el) el.textContent = total ? `${total}개 입력` : '입력없음';
+}
+
+async function saveCh(chKey) {
+  const date = document.getElementById('work-date').value || TODAY;
+  const repType = document.getElementById('report-type-sel').value;
+  const rows = inputData[chKey].filter(r => r.product && !r.savedId);
+  if (!rows.length) { showToast('저장할 새 항목이 없습니다', 'error'); return; }
+  lb(true);
+  const toInsert = rows.map(r => ({
+    channel: chKey,
+    buyer_name: r.name || '',
+    product_name: r.product,
+    quantity: parseInt(r.qty) || 1,
+    note: r.note || '',
+    report_type: repType,
+    date,
+    sold_at: new Date().toISOString(),
+  }));
+  const saved = await addSalesBatch(toInsert);
+  lb(false);
+  if (saved) {
+    saved.forEach((s, i) => { rows[i].savedId = s.id; });
+    // update UI - add saved class
+    rows.forEach(r => {
+      document.querySelectorAll(`#srow-${r.tempId} input`).forEach(i => i.classList.add('saved'));
+    });
+    showToast(`${saved.length}건 저장됨`);
+    await loadSummary();
+  }
+}
+
+async function saveAll() {
+  let total = 0;
+  for (const ch of CHANNELS) {
+    const rows = inputData[ch.key].filter(r => r.product && !r.savedId);
+    if (!rows.length) continue;
+    const date = document.getElementById('work-date').value || TODAY;
+    const repType = document.getElementById('report-type-sel').value;
+    const toInsert = rows.map(r => ({
+      channel: ch.key, buyer_name: r.name || '', product_name: r.product,
+      quantity: parseInt(r.qty)||1, note: r.note||'', report_type: repType,
+      date, sold_at: new Date().toISOString(),
+    }));
+    lb(true);
+    const saved = await addSalesBatch(toInsert);
+    lb(false);
+    if (saved) {
+      saved.forEach((s,i) => { rows[i].savedId = s.id; });
+      rows.forEach(r => {
+        document.querySelectorAll(`#srow-${r.tempId} input`).forEach(i => i.classList.add('saved'));
+      });
+      total += saved.length;
+    }
+  }
+  if (total) { showToast(`총 ${total}건 저장됨`); await loadSummary(); }
+  else showToast('저장할 새 항목이 없습니다', 'error');
+}
+
+// ──────────────────────────────────────────────
+// 판매 이력
+// ──────────────────────────────────────────────
+async function loadHistory() {
+  lb(true);
+  const buyer   = document.getElementById('hist-buyer').value.trim();
+  const channel = document.getElementById('hist-channel').value;
+  const from    = document.getElementById('hist-from').value;
+  const to      = document.getElementById('hist-to').value;
+  histRows = await getSales({ buyerName: buyer||undefined, channel: channel||undefined, dateFrom: from||undefined, dateTo: to||undefined });
+  lb(false);
+  renderHistory();
+}
+
+async function searchHistory() { await loadHistory(); }
+
+function clearHistFilter() {
+  document.getElementById('hist-buyer').value = '';
+  document.getElementById('hist-channel').value = '';
+  document.getElementById('hist-from').value = '';
+  document.getElementById('hist-to').value = '';
+  loadHistory();
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  const cnt  = document.getElementById('hist-result-count');
+  if (cnt) cnt.textContent = `${histRows.length}건`;
+  if (!histRows.length) { list.innerHTML = '<div class="empty">조회된 판매 내역이 없습니다.</div>'; return; }
+
+  // 날짜별 그룹
+  const grouped = {};
+  histRows.forEach(r => {
+    if (!grouped[r.date]) grouped[r.date] = [];
+    grouped[r.date].push(r);
+  });
+
+  const buyer = document.getElementById('hist-buyer').value.trim();
+
+  list.innerHTML = Object.entries(grouped).sort(([a],[b]) => b.localeCompare(a)).map(([date, rows]) => {
+    const dayTotal = rows.reduce((a,r) => a+r.quantity, 0);
+    const rowsHTML = rows.map(r => {
+      const ch = CHANNELS.find(c => c.key === r.channel);
+      const nameHL = buyer && r.buyer_name ? r.buyer_name.replace(new RegExp(buyer,'gi'), m => `<mark class="highlight">${m}</mark>`) : (r.buyer_name||'-');
+      return `<tr style="${histSel.has(r.id)?'background:var(--accent-bg)':''}">
+        <td><input type="checkbox" class="row-cb" onchange="histOnCheck(${r.id},this.checked)" ${histSel.has(r.id)?'checked':''}></td>
+        <td><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:${ch?.color||'#888'};display:inline-block"></span>${ch?.label||r.channel}</span></td>
+        <td class="fw-bold">${nameHL}</td>
+        <td>${r.product_name}</td>
+        <td class="right mono">${r.quantity}개</td>
+        <td class="text-muted text-sm">${r.note||'-'}</td>
+        <td><span class="badge ${r.report_type==='morning'?'badge-info':'badge-gray'}">${r.report_type==='morning'?'출근':'퇴근'}</span></td>
+        <td class="right"><button class="btn btn-sm btn-danger" onclick="deleteOneHist(${r.id})">삭제</button></td>
+      </tr>`;
+    }).join('');
+    return `<div class="hist-date-group">
+      <div class="hist-date-label">
+        ${date}
+        <span class="hist-date-badge">${rows.length}건 · ${dayTotal}개</span>
+      </div>
+      <div class="card" style="padding:0"><div class="tbl-wrap"><table>
+        <thead><tr>
+          <th style="width:32px"><input type="checkbox" class="row-cb" onchange="histToggleDate('${date}',this.checked)"></th>
+          <th style="width:100px">채널</th><th style="width:110px">구매자</th><th>품목</th>
+          <th class="right" style="width:60px">수량</th><th style="width:140px">비고</th>
+          <th style="width:70px">구분</th><th class="right" style="width:55px">삭제</th>
+        </tr></thead>
+        <tbody>${rowsHTML}</tbody>
+      </table></div></div>
+    </div>`;
+  }).join('');
+
+  updateHistBulkBar();
+}
+
+function histOnCheck(id, checked) {
+  if (checked) histSel.add(id); else histSel.delete(id);
+  updateHistBulkBar();
+}
+function histToggleDate(date, checked) {
+  histRows.filter(r => r.date===date).forEach(r => { if(checked) histSel.add(r.id); else histSel.delete(r.id); });
+  renderHistory();
+}
+function updateHistBulkBar() {
+  const bar = document.getElementById('hist-bulk-bar');
+  const cnt = document.getElementById('hist-bulk-count');
+  if (histSel.size > 0) { bar.classList.add('show'); cnt.textContent = `${histSel.size}개 선택됨`; }
+  else bar.classList.remove('show');
+}
+function clearHistSel() { histSel.clear(); renderHistory(); }
+
+async function deleteOneHist(id) {
+  if (!confirm('이 항목을 삭제하시겠습니까?')) return;
+  lb(true); await deleteSale(id); lb(false);
+  histRows = histRows.filter(r => r.id !== id);
+  histSel.delete(id);
+  renderHistory(); await loadSummary();
+}
+
+async function deleteSelectedHist() {
+  if (!histSel.size) return;
+  if (!confirm(`선택한 ${histSel.size}개 항목을 삭제하시겠습니까?`)) return;
+  lb(true);
+  const ids = [...histSel];
+  await deleteSalesBatch(ids);
+  lb(false);
+  histRows = histRows.filter(r => !ids.includes(r.id));
+  histSel.clear();
+  showToast(`${ids.length}개 삭제됨`);
+  renderHistory(); await loadSummary();
+}
+
+async function deleteAllVisible() {
+  if (!histRows.length) return;
+  if (!confirm(`조회된 ${histRows.length}건을 모두 삭제하시겠습니까?`)) return;
+  lb(true);
+  await deleteSalesBatch(histRows.map(r => r.id));
+  lb(false);
+  showToast(`${histRows.length}건 삭제됨`);
+  histRows = []; histSel.clear();
+  renderHistory(); await loadSummary();
+}
+
+// ──────────────────────────────────────────────
+// 구매자 조회
+// ──────────────────────────────────────────────
+async function loadBuyers() {
+  lb(true);
+  allBuyerData = await getBuyerSummary();
+  lb(false);
+  renderBuyers();
+}
+
+function searchBuyer() { renderBuyers(); }
+
+function renderBuyers() {
+  const q = document.getElementById('buyer-search').value.trim().toLowerCase();
+  const chFilter = document.getElementById('buyer-channel-filter').value;
+  const cnt = document.getElementById('buyer-result-count');
+
+  // 구매자별 집계
+  const byBuyer = {};
+  allBuyerData.forEach(r => {
+    if (!r.buyer_name) return;
+    if (chFilter && r.channel !== chFilter) return;
+    if (!byBuyer[r.buyer_name]) byBuyer[r.buyer_name] = { rows:[], totalQty:0, channels:new Set(), dates:[] };
+    byBuyer[r.buyer_name].rows.push(r);
+    byBuyer[r.buyer_name].totalQty += r.quantity;
+    byBuyer[r.buyer_name].channels.add(r.channel);
+    byBuyer[r.buyer_name].dates.push(r.date);
+  });
+
+  let filtered = Object.entries(byBuyer);
+  if (q) filtered = filtered.filter(([name]) => name.toLowerCase().includes(q));
+  filtered.sort((a,b) => b[1].totalQty - a[1].totalQty);
+
+  if (cnt) cnt.textContent = `${filtered.length}명`;
+  const list = document.getElementById('buyer-list');
+  if (!filtered.length) { list.innerHTML = '<div class="empty">조회된 구매자가 없습니다.</div>'; return; }
+
+  list.innerHTML = filtered.map(([name, data]) => {
+    const lastDate = data.dates.sort().reverse()[0];
+    const firstDate = data.dates.sort()[0];
+    const chLabels = [...data.channels].map(k => CHANNELS.find(c=>c.key===k)?.label||k).join(', ');
+    const nameHL = q ? name.replace(new RegExp(q,'gi'), m=>`<mark class="highlight">${m}</mark>`) : name;
+
+    // 품목별 집계
+    const byProduct = {};
+    data.rows.forEach(r => {
+      if (!byProduct[r.product_name]) byProduct[r.product_name] = 0;
+      byProduct[r.product_name] += r.quantity;
+    });
+
+    const detailRows = data.rows.sort((a,b) => b.date.localeCompare(a.date)).map(r => {
+      const ch = CHANNELS.find(c=>c.key===r.channel);
+      return `<tr>
+        <td class="text-muted text-sm">${r.date}</td>
+        <td><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:${ch?.color||'#888'};display:inline-block"></span>${ch?.label||r.channel}</span></td>
+        <td>${r.product_name}</td>
+        <td class="right mono">${r.quantity}개</td>
+        <td class="text-muted text-sm">${r.note||'-'}</td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="buyer-card" onclick="toggleBuyer(this)">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="width:36px;height:36px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0">${name.charAt(0)}</div>
+        <div style="flex:1">
+          <div class="buyer-name">${nameHL}</div>
+          <div class="buyer-meta">총 ${data.totalQty}개 구매 · ${data.rows.length}건 · 최근: ${lastDate}</div>
+        </div>
+        <div class="stat-chips">
+          ${[...data.channels].map(k=>{const ch=CHANNELS.find(c=>c.key===k);return`<span class="stat-chip" style="border-color:${ch?.color||'#888'};color:${ch?.color||'#888'}">${ch?.label||k}</span>`;}).join('')}
+        </div>
+      </div>
+      <div class="buyer-detail">
+        <div style="display:flex;gap:16px;margin-bottom:10px;font-size:12.5px;flex-wrap:wrap">
+          <span style="color:var(--text2)">첫 구매: <strong>${firstDate}</strong></span>
+          <span style="color:var(--text2)">최근 구매: <strong>${lastDate}</strong></span>
+          <span style="color:var(--text2)">구매 채널: <strong>${chLabels}</strong></span>
+        </div>
+        <div style="margin-bottom:10px">
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">품목별 구매량</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${Object.entries(byProduct).sort((a,b)=>b[1]-a[1]).map(([prod,qty])=>`<span class="badge badge-gray">${prod} <strong>${qty}개</strong></span>`).join('')}
+          </div>
+        </div>
+        <div class="card" style="padding:0"><div class="tbl-wrap"><table>
+          <thead><tr><th>날짜</th><th>채널</th><th>품목</th><th class="right">수량</th><th>비고</th></tr></thead>
+          <tbody>${detailRows}</tbody>
+        </table></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleBuyer(card) {
+  const detail = card.querySelector('.buyer-detail');
+  detail.classList.toggle('open');
+  card.classList.toggle('open');
+}
+
+// ──────────────────────────────────────────────
+// 채널 필터 셀렉트 초기화
+// ──────────────────────────────────────────────
+function initChannelFilters() {
+  ['hist-channel','buyer-channel-filter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    CHANNELS.forEach(ch => {
+      const opt = document.createElement('option');
+      opt.value = ch.key; opt.textContent = ch.label;
+      el.appendChild(opt);
+    });
+  });
+}
+
+// ──────────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────────
+initChannelFilters();
+renderInputChannels();
+loadSummary();
+</script>
+</body>
+</html>
