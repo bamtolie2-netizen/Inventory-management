@@ -20,14 +20,25 @@
 .ch-body{display:none;padding:10px 14px;border-top:1px solid var(--border);background:var(--surface)}
 .ch-body.open{display:block}
 
-/* ── 판매 행 입력 ── */
-.sale-row{display:grid;grid-template-columns:110px 1fr 60px 1fr 28px;gap:5px;align-items:center;margin-bottom:5px}
-.sale-row input{font-size:12.5px;padding:6px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1);width:100%}
-.sale-row input:focus{outline:none;border-color:var(--accent)}
-.sale-row input.saved{border-color:var(--green-bd);background:var(--green-bg)}
+/* ── 주문자 블록 ── */
+.buyer-block{border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;background:var(--surface)}
+.buyer-block.saved-block{border-color:var(--green-bd);background:var(--green-bg)}
+.buyer-block-hd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-bottom:1px solid var(--border)}
+.buyer-block.saved-block .buyer-block-hd{background:var(--green-bg)}
+.buyer-name-inp{font-size:13px;font-weight:600;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1);width:130px;flex-shrink:0}
+.buyer-name-inp:focus{outline:none;border-color:var(--accent)}
+.buyer-name-inp.saved{border-color:var(--green-bd);background:var(--green-bg)}
+.buyer-items{padding:8px 10px}
+/* 품목 행 */
+.item-row{display:grid;grid-template-columns:1fr 58px 1fr 24px;gap:5px;align-items:center;margin-bottom:5px}
+.item-row input{font-size:12.5px;padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1);width:100%}
+.item-row input:focus{outline:none;border-color:var(--accent)}
+.item-row input.saved{border-color:var(--green-bd);background:var(--green-bg)}
+.add-item-btn{font-size:11px;padding:3px 8px;border:1px dashed var(--border2);border-radius:5px;cursor:pointer;background:none;color:var(--text3);margin-top:2px;display:inline-flex;align-items:center;gap:3px}
+.add-item-btn:hover{background:var(--bg);color:var(--accent);border-color:var(--accent)}
 .add-row-btn{font-size:11.5px;padding:4px 10px;border:1px dashed var(--border2);border-radius:6px;cursor:pointer;background:none;color:var(--text3);margin-top:4px}
 .add-row-btn:hover{background:var(--bg);color:var(--text1)}
-.del-btn{width:24px;height:24px;border:none;background:none;cursor:pointer;color:var(--text3);font-size:16px;display:flex;align-items:center;justify-content:center;border-radius:4px;flex-shrink:0}
+.del-btn{width:22px;height:22px;border:none;background:none;cursor:pointer;color:var(--text3);font-size:15px;display:flex;align-items:center;justify-content:center;border-radius:4px;flex-shrink:0}
 .del-btn:hover{background:var(--red-bg);color:var(--red)}
 .save-ch-btn{font-size:11.5px;padding:5px 12px;border:1px solid var(--green-bd);border-radius:6px;cursor:pointer;background:var(--green-bg);color:var(--green);margin-top:6px;font-weight:500}
 .save-ch-btn:hover{background:#dcfce7}
@@ -176,7 +187,7 @@ document.getElementById('work-date').value = TODAY;
 document.getElementById('work-date').addEventListener('change', () => renderInputChannels());
 document.getElementById('report-type-sel').addEventListener('change', () => renderInputChannels());
 
-// inputData: { chKey: [ {name, product, qty, note, tempId} ] }
+// inputData: { chKey: [ {buyerTid, name, items:[{itemTid,product,qty,note,savedId}], savedIds:[]} ] }
 const inputData = {};
 CHANNELS.forEach(ch => { inputData[ch.key] = []; });
 let tempId = 0;
@@ -223,9 +234,8 @@ async function loadSummary() {
 function renderInputChannels() {
   const el = document.getElementById('input-channels');
   el.innerHTML = CHANNELS.map(ch => {
-    const rows = inputData[ch.key];
-    const savedCount = rows.filter(r => r.savedId).length;
-    const total = rows.reduce((a,r) => a+(parseInt(r.qty)||0), 0);
+    const buyers = inputData[ch.key];
+    const total = buyers.reduce((a,b) => a + b.items.reduce((s,i) => s+(parseInt(i.qty)||0), 0), 0);
     const stat = total ? `${total}개 입력` : '입력없음';
     return `<div class="ch-block" id="chb-${ch.key}">
       <div class="ch-block-hd" onclick="toggleCh('${ch.key}')">
@@ -235,13 +245,13 @@ function renderInputChannels() {
         <div class="ch-arr" id="charr-${ch.key}">▼</div>
       </div>
       <div class="ch-body" id="chbody-${ch.key}">
-        <div style="display:grid;grid-template-columns:110px 1fr 60px 1fr 28px;gap:5px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;padding:0 2px;margin-bottom:6px">
-          <span>구매자 이름</span><span>품목명</span><span style="text-align:right">수량</span><span>비고</span><span></span>
+        <div style="display:grid;grid-template-columns:1fr 58px 1fr 24px;gap:5px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;padding:2px 10px 4px;margin-bottom:4px;background:var(--bg);border-radius:4px">
+          <span>품목명</span><span style="text-align:right">수량</span><span>비고</span><span></span>
         </div>
         <div id="chrows-${ch.key}">
-          ${rows.map(r => saleRowHTML(ch.key, r)).join('')}
+          ${rows.map(b => buyerBlockHTML(ch.key, b)).join('')}
         </div>
-        <button class="add-row-btn" onclick="addRow('${ch.key}')">+ 주문자 추가</button>
+        <button class="add-row-btn" onclick="addBuyer('${ch.key}')">+ 주문자 추가</button>
         <div style="display:flex;gap:8px;margin-top:8px">
           <button class="save-ch-btn" onclick="saveCh('${ch.key}')">이 채널 저장</button>
           <button class="btn btn-sm btn-danger" onclick="clearCh('${ch.key}')" style="font-size:11px">초기화</button>
@@ -251,14 +261,40 @@ function renderInputChannels() {
   }).join('');
 }
 
-function saleRowHTML(chKey, r) {
-  const cls = r.savedId ? 'saved' : '';
-  return `<div class="sale-row" id="srow-${r.tempId}">
-    <input placeholder="구매자 이름" value="${r.name||''}" class="${cls}" oninput="setRow('${chKey}',${r.tempId},'name',this.value)">
-    <input placeholder="품목명" value="${r.product||''}" class="${cls}" oninput="setRow('${chKey}',${r.tempId},'product',this.value)">
-    <input type="number" placeholder="0" min="0" value="${r.qty||''}" class="${cls}" style="text-align:right" oninput="setRow('${chKey}',${r.tempId},'qty',this.value)">
-    <input placeholder="비고" value="${r.note||''}" class="${cls}" oninput="setRow('${chKey}',${r.tempId},'note',this.value)">
-    <button class="del-btn" onclick="delRow('${chKey}',${r.tempId})" title="삭제">×</button>
+function buyerBlockHTML(chKey, b) {
+  const allSaved = b.items.length > 0 && b.items.every(i => i.savedId);
+  return `<div class="buyer-block ${allSaved?'saved-block':''}" id="buyer-${b.buyerTid}">
+    <div class="buyer-block-hd">
+      <input class="buyer-name-inp ${allSaved?'saved':''}" placeholder="구매자 이름"
+        value="${b.name||''}"
+        oninput="setBuyerName('${chKey}',${b.buyerTid},this.value)">
+      <span style="font-size:11px;color:var(--text3);margin-left:4px;flex:1">
+        ${b.items.length}품목 · ${b.items.reduce((a,i)=>a+(parseInt(i.qty)||0),0)}개
+      </span>
+      <button class="del-btn" style="font-size:13px" onclick="delBuyer('${chKey}',${b.buyerTid})" title="구매자 삭제">×</button>
+    </div>
+    <div class="buyer-items">
+      <div style="display:grid;grid-template-columns:1fr 58px 1fr 24px;gap:5px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;padding:0 2px">
+        <span>품목명</span><span style="text-align:right">수량</span><span>비고</span><span></span>
+      </div>
+      <div id="items-${b.buyerTid}">
+        ${b.items.map(item => itemRowHTML(chKey, b.buyerTid, item)).join('')}
+      </div>
+      <button class="add-item-btn" onclick="addItem('${chKey}',${b.buyerTid})">＋ 품목 추가</button>
+    </div>
+  </div>`;
+}
+
+function itemRowHTML(chKey, buyerTid, item) {
+  const cls = item.savedId ? 'saved' : '';
+  return `<div class="item-row" id="item-${item.itemTid}">
+    <input placeholder="품목명" value="${item.product||''}" class="${cls}"
+      oninput="setItem('${chKey}',${buyerTid},${item.itemTid},'product',this.value)">
+    <input type="number" placeholder="0" min="0" value="${item.qty||''}" class="${cls}"
+      style="text-align:right" oninput="setItem('${chKey}',${buyerTid},${item.itemTid},'qty',this.value)">
+    <input placeholder="비고" value="${item.note||''}" class="${cls}"
+      oninput="setItem('${chKey}',${buyerTid},${item.itemTid},'note',this.value)">
+    <button class="del-btn" onclick="delItem('${chKey}',${buyerTid},${item.itemTid})" title="삭제">×</button>
   </div>`;
 }
 
@@ -269,33 +305,81 @@ function toggleCh(key) {
   arr.textContent = body.classList.contains('open') ? '▲' : '▼';
 }
 
-function addRow(chKey) {
-  const row = { tempId: ++tempId, name:'', product:'', qty:'', note:'', savedId: null };
-  inputData[chKey].push(row);
+function addBuyer(chKey) {
+  const buyer = { buyerTid: ++tempId, name:'', items:[{ itemTid:++tempId, product:'', qty:'', note:'', savedId:null }] };
+  inputData[chKey].push(buyer);
   const el = document.getElementById('chrows-'+chKey);
-  el.insertAdjacentHTML('beforeend', saleRowHTML(chKey, row));
-  // open block
+  el.insertAdjacentHTML('beforeend', buyerBlockHTML(chKey, buyer));
   const body = document.getElementById('chbody-'+chKey);
   const arr  = document.getElementById('charr-'+chKey);
   if (!body.classList.contains('open')) { body.classList.add('open'); arr.textContent='▲'; }
+  // focus on name input
+  setTimeout(() => document.querySelector(`#buyer-${buyer.buyerTid} .buyer-name-inp`)?.focus(), 30);
 }
 
-function setRow(chKey, tid, field, val) {
-  const r = inputData[chKey].find(x => x.tempId === tid);
-  if (r) {
-    r[field] = val;
-    r.savedId = null; // 수정하면 저장 상태 해제
-    // remove saved style
-    const inp = document.querySelector(`#srow-${tid} input`);
-    document.querySelectorAll(`#srow-${tid} input`).forEach(i => i.classList.remove('saved'));
-    updateChStat(chKey);
-  }
+function addItem(chKey, buyerTid) {
+  const buyer = inputData[chKey].find(b => b.buyerTid === buyerTid);
+  if (!buyer) return;
+  const item = { itemTid: ++tempId, product:'', qty:'', note:'', savedId:null };
+  buyer.items.push(item);
+  const el = document.getElementById('items-'+buyerTid);
+  el.insertAdjacentHTML('beforeend', itemRowHTML(chKey, buyerTid, item));
+  setTimeout(() => document.querySelector(`#item-${item.itemTid} input`)?.focus(), 30);
 }
 
-function delRow(chKey, tid) {
-  inputData[chKey] = inputData[chKey].filter(x => x.tempId !== tid);
-  document.getElementById('srow-'+tid)?.remove();
+function setBuyerName(chKey, buyerTid, val) {
+  const buyer = inputData[chKey].find(b => b.buyerTid === buyerTid);
+  if (!buyer) return;
+  buyer.name = val;
+  // unsave all items
+  buyer.items.forEach(i => i.savedId = null);
+  document.querySelectorAll(`#buyer-${buyerTid} input`).forEach(i => i.classList.remove('saved'));
+  refreshBuyerHeader(chKey, buyerTid);
+}
+
+function setItem(chKey, buyerTid, itemTid, field, val) {
+  const buyer = inputData[chKey].find(b => b.buyerTid === buyerTid);
+  if (!buyer) return;
+  const item = buyer.items.find(i => i.itemTid === itemTid);
+  if (!item) return;
+  item[field] = val;
+  item.savedId = null;
+  document.querySelectorAll(`#item-${itemTid} input`).forEach(i => i.classList.remove('saved'));
+  refreshBuyerHeader(chKey, buyerTid);
   updateChStat(chKey);
+}
+
+function refreshBuyerHeader(chKey, buyerTid) {
+  const buyer = inputData[chKey].find(b => b.buyerTid === buyerTid);
+  if (!buyer) return;
+  const block = document.getElementById('buyer-'+buyerTid);
+  if (!block) return;
+  const allSaved = buyer.items.length > 0 && buyer.items.every(i => i.savedId);
+  block.className = `buyer-block ${allSaved?'saved-block':''}`;
+  const hd = block.querySelector('.buyer-block-hd');
+  if (hd) {
+    const statEl = hd.querySelector('span');
+    if (statEl) statEl.textContent = `${buyer.items.length}품목 · ${buyer.items.reduce((a,i)=>a+(parseInt(i.qty)||0),0)}개`;
+  }
+  updateChStat(chKey);
+}
+
+function delBuyer(chKey, buyerTid) {
+  inputData[chKey] = inputData[chKey].filter(b => b.buyerTid !== buyerTid);
+  document.getElementById('buyer-'+buyerTid)?.remove();
+  updateChStat(chKey);
+}
+
+function delItem(chKey, buyerTid, itemTid) {
+  const buyer = inputData[chKey].find(b => b.buyerTid === buyerTid);
+  if (!buyer) return;
+  if (buyer.items.length === 1) {
+    // 마지막 품목이면 구매자 블록 전체 삭제
+    delBuyer(chKey, buyerTid); return;
+  }
+  buyer.items = buyer.items.filter(i => i.itemTid !== itemTid);
+  document.getElementById('item-'+itemTid)?.remove();
+  refreshBuyerHeader(chKey, buyerTid);
 }
 
 function clearCh(chKey) {
@@ -306,8 +390,8 @@ function clearCh(chKey) {
 }
 
 function updateChStat(chKey) {
-  const rows = inputData[chKey];
-  const total = rows.reduce((a,r) => a+(parseInt(r.qty)||0), 0);
+  const buyers = inputData[chKey];
+  const total = buyers.reduce((a,b) => a + b.items.reduce((s,i) => s+(parseInt(i.qty)||0), 0), 0);
   const el = document.getElementById('chstat-'+chKey);
   if (el) el.textContent = total ? `${total}개 입력` : '입력없음';
 }
@@ -315,27 +399,39 @@ function updateChStat(chKey) {
 async function saveCh(chKey) {
   const date = document.getElementById('work-date').value || TODAY;
   const repType = document.getElementById('report-type-sel').value;
-  const rows = inputData[chKey].filter(r => r.product && !r.savedId);
-  if (!rows.length) { showToast('저장할 새 항목이 없습니다', 'error'); return; }
+  // 미저장 품목 수집
+  const toInsert = [];
+  const unsavedItems = []; // { buyer, item } 참조
+  inputData[chKey].forEach(buyer => {
+    buyer.items.forEach(item => {
+      if (item.product && !item.savedId) {
+        toInsert.push({
+          channel: chKey,
+          buyer_name: buyer.name || '',
+          product_name: item.product,
+          quantity: parseInt(item.qty) || 1,
+          note: item.note || '',
+          report_type: repType,
+          date,
+          sold_at: new Date().toISOString(),
+        });
+        unsavedItems.push({ buyer, item });
+      }
+    });
+  });
+  if (!toInsert.length) { showToast('저장할 새 항목이 없습니다', 'error'); return; }
   lb(true);
-  const toInsert = rows.map(r => ({
-    channel: chKey,
-    buyer_name: r.name || '',
-    product_name: r.product,
-    quantity: parseInt(r.qty) || 1,
-    note: r.note || '',
-    report_type: repType,
-    date,
-    sold_at: new Date().toISOString(),
-  }));
   const saved = await addSalesBatch(toInsert);
   lb(false);
   if (saved) {
-    saved.forEach((s, i) => { rows[i].savedId = s.id; });
-    // update UI - add saved class
-    rows.forEach(r => {
-      document.querySelectorAll(`#srow-${r.tempId} input`).forEach(i => i.classList.add('saved'));
+    // savedId 매핑
+    saved.forEach((s, i) => {
+      unsavedItems[i].item.savedId = s.id;
+      // UI 업데이트
+      document.querySelectorAll(`#item-${unsavedItems[i].item.itemTid} input`).forEach(el => el.classList.add('saved'));
     });
+    // 구매자 블록 헤더 갱신
+    inputData[chKey].forEach(b => refreshBuyerHeader(chKey, b.buyerTid));
     showToast(`${saved.length}건 저장됨`);
     await loadSummary();
   }
@@ -343,24 +439,30 @@ async function saveCh(chKey) {
 
 async function saveAll() {
   let total = 0;
+  const date = document.getElementById('work-date').value || TODAY;
+  const repType = document.getElementById('report-type-sel').value;
   for (const ch of CHANNELS) {
-    const rows = inputData[ch.key].filter(r => r.product && !r.savedId);
-    if (!rows.length) continue;
-    const date = document.getElementById('work-date').value || TODAY;
-    const repType = document.getElementById('report-type-sel').value;
-    const toInsert = rows.map(r => ({
-      channel: ch.key, buyer_name: r.name || '', product_name: r.product,
-      quantity: parseInt(r.qty)||1, note: r.note||'', report_type: repType,
-      date, sold_at: new Date().toISOString(),
-    }));
+    const toInsert = [];
+    const unsaved = [];
+    inputData[ch.key].forEach(buyer => {
+      buyer.items.forEach(item => {
+        if (item.product && !item.savedId) {
+          toInsert.push({ channel:ch.key, buyer_name:buyer.name||'', product_name:item.product,
+            quantity:parseInt(item.qty)||1, note:item.note||'', report_type:repType, date, sold_at:new Date().toISOString() });
+          unsaved.push({ buyer, item });
+        }
+      });
+    });
+    if (!toInsert.length) continue;
     lb(true);
     const saved = await addSalesBatch(toInsert);
     lb(false);
     if (saved) {
-      saved.forEach((s,i) => { rows[i].savedId = s.id; });
-      rows.forEach(r => {
-        document.querySelectorAll(`#srow-${r.tempId} input`).forEach(i => i.classList.add('saved'));
+      saved.forEach((s,i) => {
+        unsaved[i].item.savedId = s.id;
+        document.querySelectorAll(`#item-${unsaved[i].item.itemTid} input`).forEach(el => el.classList.add('saved'));
       });
+      inputData[ch.key].forEach(b => refreshBuyerHeader(ch.key, b.buyerTid));
       total += saved.length;
     }
   }
