@@ -249,7 +249,7 @@ function renderInputChannels() {
           <span>품목명</span><span style="text-align:right">수량</span><span>비고</span><span></span>
         </div>
         <div id="chrows-${ch.key}">
-          ${rows.map(b => buyerBlockHTML(ch.key, b)).join('')}
+          ${buyers.map(b => buyerBlockHTML(ch.key, b)).join('')}
         </div>
         <button class="add-row-btn" onclick="addBuyer('${ch.key}')">+ 주문자 추가</button>
         <div style="display:flex;gap:8px;margin-top:8px">
