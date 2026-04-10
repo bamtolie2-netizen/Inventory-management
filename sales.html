@@ -515,15 +515,15 @@ function renderProdDropdown(chKey, buyerTid, tid, val) {
 
   ddFocusIdx[tid] = -1;
   dd.classList.add('show');
-  // 마우스휠 이벤트가 페이지로 전파되지 않도록 차단
-  dd.onwheel = (e) => {
-    const atTop    = dd.scrollTop === 0 && e.deltaY < 0;
-    const atBottom = dd.scrollTop + dd.clientHeight >= dd.scrollHeight && e.deltaY > 0;
-    if (!atTop && !atBottom) e.stopPropagation();
-    // 드롭다운 내부에서만 스크롤
-    dd.scrollTop += e.deltaY;
-    e.preventDefault();
-  };
+  // passive:false 로 등록해야 preventDefault() 가 실제로 동작함
+  if (!dd._wheelBound) {
+    dd.addEventListener('wheel', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      dd.scrollTop += e.deltaY;
+    }, { passive: false });
+    dd._wheelBound = true;
+  }
 }
 
 function setDdFocus(tid, idx) {
