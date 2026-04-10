@@ -520,16 +520,15 @@ function renderProdDropdown(chKey, buyerTid, tid, val) {
 
   ddFocusIdx[tid] = -1;
   dd.classList.add('show');
-  // wheel 이벤트를 capture phase에서 직접 처리
+  // passive:false 로 드롭다운 내부 스크롤만 처리
   if (!dd._wheelBound) {
     dd.addEventListener('wheel', function(e) {
-      e.stopImmediatePropagation();
-      const scrollable = this.scrollHeight > this.clientHeight;
-      if (!scrollable) return;
-      const up   = e.deltaY < 0 && this.scrollTop === 0;
-      const down = e.deltaY > 0 && this.scrollTop + this.clientHeight >= this.scrollHeight - 1;
-      if (!up && !down) e.preventDefault();
-    }, { passive: false, capture: true });
+      e.stopPropagation();
+      if (this.classList.contains('show')) {
+        e.preventDefault();
+        this.scrollTop += e.deltaY;
+      }
+    }, { passive: false });
     dd._wheelBound = true;
   }
 }
