@@ -72,7 +72,18 @@
 /* ── 검색 강조 ── */
 .highlight{background:#FEF9C3;border-radius:2px}
 
-/* ── 실시간 보고서 패널 ── */
+/* ── 품목 자동완성 콤보 ── */
+.product-combo{position:relative;flex:1}
+.product-combo input{width:100%;box-sizing:border-box}
+.product-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border2);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:500;max-height:200px;overflow-y:auto;display:none}
+.product-dropdown.show{display:block}
+.product-dropdown-item{padding:7px 10px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s}
+.product-dropdown-item:last-child{border-bottom:none}
+.product-dropdown-item:hover,.product-dropdown-item.focused{background:var(--accent-bg);color:var(--accent)}
+.product-dropdown-item mark{background:#FEF9C3;border-radius:2px;color:inherit;font-weight:600}
+.product-dropdown-item .prod-sub{font-size:11px;color:var(--text3);margin-top:1px}
+
+/* ── 실시간 보고서 패널 ── *//* ── 실시간 보고서 패널 ── */
 .input-layout{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start}
 @media(max-width:960px){.input-layout{grid-template-columns:1fr}}
 .report-panel{position:sticky;top:calc(var(--top-h) + 16px)}
@@ -328,14 +339,22 @@ function buyerBlockHTML(chKey, b) {
 
 function itemRowHTML(chKey, buyerTid, item) {
   const cls = item.savedId ? 'saved' : '';
-  return `<div class="item-row" id="item-${item.itemTid}">
-    <input placeholder="품목명" value="${item.product||''}" class="${cls}"
-      oninput="setItem('${chKey}',${buyerTid},${item.itemTid},'product',this.value)">
-    <input type="number" placeholder="0" min="0" value="${item.qty||''}" class="${cls}"
-      style="text-align:right" oninput="setItem('${chKey}',${buyerTid},${item.itemTid},'qty',this.value)">
-    <input placeholder="비고" value="${item.note||''}" class="${cls}"
-      oninput="setItem('${chKey}',${buyerTid},${item.itemTid},'note',this.value)">
-    <button class="del-btn" onclick="delItem('${chKey}',${buyerTid},${item.itemTid})" title="삭제">×</button>
+  const tid = item.itemTid;
+  return `<div class="item-row" id="item-${tid}">
+    <div class="product-combo">
+      <input id="prod-inp-${tid}" placeholder="품목명 입력 또는 선택" value="${(item.product||'').replace(/"/g,'&quot;')}" class="${cls}"
+        autocomplete="off"
+        oninput="onProdInput('${chKey}',${buyerTid},${tid},this.value)"
+        onkeydown="onProdKeydown(event,'${chKey}',${buyerTid},${tid})"
+        onfocus="showProdDropdown('${chKey}',${buyerTid},${tid},this.value)"
+        onblur="hideProdDropdown(${tid})">
+      <div class="product-dropdown" id="prod-dd-${tid}"></div>
+    </div>
+    <input id="prod-qty-${tid}" type="number" placeholder="0" min="0" value="${item.qty||''}" class="${cls}"
+      style="text-align:right" oninput="setItem('${chKey}',${buyerTid},${tid},'qty',this.value)">
+    <input placeholder="비고" value="${(item.note||'').replace(/"/g,'&quot;')}" class="${cls}"
+      oninput="setItem('${chKey}',${buyerTid},${tid},'note',this.value)">
+    <button class="del-btn" onclick="delItem('${chKey}',${buyerTid},${tid})" title="삭제">×</button>
   </div>`;
 }
 
@@ -428,6 +447,104 @@ function clearCh(chKey) {
   inputData[chKey] = [];
   document.getElementById('chrows-'+chKey).innerHTML = '';
   updateChStat(chKey);
+}
+
+// ── 품목 자동완성 드롭다운 ───────────────────────────
+let allProducts = []; // 전체 품목 캐시
+let ddFocusIdx = {}; // 드롭다운 포커스 인덱스 { tid: n }
+
+async function loadProductsForCombo() {
+  if (allProducts.length) return;
+  const prods = await getProductsWithPrices();
+  allProducts = prods.map(p => ({ name: p.name, cat: p.category, unit: p.unit, cost: p.cost }));
+}
+
+function filterProducts(q) {
+  if (!q) return allProducts.slice(0, 15);
+  const lq = q.toLowerCase();
+  return allProducts.filter(p => p.name.toLowerCase().includes(lq)).slice(0, 15);
+}
+
+function showProdDropdown(chKey, buyerTid, tid, val) {
+  renderProdDropdown(chKey, buyerTid, tid, val);
+}
+
+function hideProdDropdown(tid) {
+  // 약간 딜레이 - 클릭 이벤트가 먼저 처리되도록
+  setTimeout(() => {
+    const dd = document.getElementById('prod-dd-'+tid);
+    if (dd) dd.classList.remove('show');
+  }, 180);
+}
+
+function onProdInput(chKey, buyerTid, tid, val) {
+  setItem(chKey, buyerTid, tid, 'product', val);
+  renderProdDropdown(chKey, buyerTid, tid, val);
+}
+
+function renderProdDropdown(chKey, buyerTid, tid, val) {
+  const dd = document.getElementById('prod-dd-'+tid);
+  if (!dd) return;
+  const filtered = filterProducts(val);
+  if (!filtered.length) { dd.classList.remove('show'); return; }
+
+  const q = (val||'').toLowerCase();
+  dd.innerHTML = filtered.map((p, i) => {
+    const nameHL = q ? p.name.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'),
+      m => `<mark>${m}</mark>`) : p.name;
+    const unitPrice = p.unit > 1 ? Math.round(p.cost/p.unit) : p.cost;
+    return `<div class="product-dropdown-item" data-idx="${i}"
+      onmousedown="selectProduct('${chKey}',${buyerTid},${tid},'${p.name.replace(/'/g,"\'")}',${unitPrice})"
+      onmouseover="setDdFocus(${tid},${i})">
+      <div>${nameHL}</div>
+      <div class="prod-sub">${p.cat} · 원가 ${unitPrice.toLocaleString()}원</div>
+    </div>`;
+  }).join('');
+
+  ddFocusIdx[tid] = -1;
+  dd.classList.add('show');
+}
+
+function setDdFocus(tid, idx) {
+  ddFocusIdx[tid] = idx;
+  document.querySelectorAll(`#prod-dd-${tid} .product-dropdown-item`).forEach((el, i) => {
+    el.classList.toggle('focused', i === idx);
+  });
+}
+
+function selectProduct(chKey, buyerTid, tid, name, unitPrice) {
+  const inp = document.getElementById('prod-inp-'+tid);
+  if (inp) inp.value = name;
+  setItem(chKey, buyerTid, tid, 'product', name);
+  // 수량 입력으로 포커스 이동
+  setTimeout(() => {
+    const qtyInp = document.getElementById('prod-qty-'+tid);
+    if (qtyInp) { qtyInp.focus(); qtyInp.select(); }
+  }, 50);
+  const dd = document.getElementById('prod-dd-'+tid);
+  if (dd) dd.classList.remove('show');
+}
+
+function onProdKeydown(e, chKey, buyerTid, tid) {
+  const dd = document.getElementById('prod-dd-'+tid);
+  if (!dd || !dd.classList.contains('show')) return;
+  const items = dd.querySelectorAll('.product-dropdown-item');
+  let idx = ddFocusIdx[tid] ?? -1;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    idx = Math.min(idx+1, items.length-1);
+    setDdFocus(tid, idx);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    idx = Math.max(idx-1, 0);
+    setDdFocus(tid, idx);
+  } else if (e.key === 'Enter' && idx >= 0) {
+    e.preventDefault();
+    items[idx]?.dispatchEvent(new MouseEvent('mousedown'));
+  } else if (e.key === 'Escape') {
+    dd.classList.remove('show');
+  }
 }
 
 function updateChStat(chKey) {
@@ -844,6 +961,7 @@ function initChannelFilters() {
 initChannelFilters();
 renderInputChannels();
 loadSummary();
+loadProductsForCombo(); // 품목 목록 미리 로드
 </script>
 </body>
 </html>
