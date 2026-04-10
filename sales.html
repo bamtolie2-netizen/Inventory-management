@@ -74,7 +74,7 @@
 
 /* ── 품목 자동완성 콤보 ── */
 .product-combo input{width:100%;box-sizing:border-box}
-.product-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border2);border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.18);z-index:9999;max-height:220px;overflow-y:auto;overscroll-behavior:contain;display:none;min-width:220px}
+.product-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border2);border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.18);z-index:9999;display:none;min-width:220px}
 .product-dropdown.show{display:block}
 .product-combo{position:relative;flex:1}
 .product-dropdown-item{padding:7px 10px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s}
@@ -460,9 +460,9 @@ async function loadProductsForCombo() {
 }
 
 function filterProducts(q) {
-  if (!q) return allProducts.slice(0, 15);
+  if (!q) return allProducts.slice(0, 6);
   const lq = q.toLowerCase();
-  return allProducts.filter(p => p.name.toLowerCase().includes(lq)).slice(0, 15);
+  return allProducts.filter(p => p.name.toLowerCase().includes(lq)).slice(0, 6);
 }
 
 function showProdDropdown(chKey, buyerTid, tid, val) {
