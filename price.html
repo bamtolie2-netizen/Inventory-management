@@ -22,6 +22,17 @@
 .calc-result{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-top:8px}
 .calc-val{font-family:var(--mono);font-size:22px;font-weight:700}
 .calc-sub{font-size:12px;color:var(--text3);margin-top:3px}
+
+/* ── 수정 모달 ── */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:800;display:flex;align-items:center;justify-content:center}
+.modal-box{background:var(--surface);border-radius:var(--radius-lg);padding:24px 26px;width:100%;max-width:440px;box-shadow:0 8px 32px rgba(0,0,0,.18);max-height:90vh;overflow-y:auto}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.modal-field{margin-bottom:13px}
+.modal-field label{display:block;font-size:11.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
+.modal-field input,.modal-field select{width:100%;font-size:13.5px;padding:8px 11px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text1)}
+.modal-field input:focus,.modal-field select:focus{outline:none;border-color:var(--accent)}
+.modal-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:14px;border-top:1px solid var(--border)}
 </style>
 </head>
 <body>
@@ -176,7 +187,7 @@ function renderTable(){
     document.getElementById('tbl-head').innerHTML=`<tr>
       <th style="width:36px"><input type="checkbox" class="row-cb" id="head-cb" onchange="toggleAll(this.checked,true)"></th>
       <th style="width:170px">품목명</th><th>카테고리</th><th>구분</th>
-      <th class="right">패키지 원가</th><th>단위</th><th class="right">개당 원가</th><th class="right">삭제</th>
+      <th class="right">패키지 원가</th><th>단위</th><th class="right">개당 원가</th><th class="right">수정/삭제</th>
     </tr>`;
     document.getElementById('tbl-body').innerHTML=rows.map(p=>`<tr style="${sel.has(p.id)?'background:var(--accent-bg)':''}">
       <td><input type="checkbox" class="row-cb" data-id="${p.id}" onchange="onCheck(${p.id},this.checked)" ${sel.has(p.id)?'checked':''}></td>
@@ -186,7 +197,10 @@ function renderTable(){
       <td class="right mono">${p.cost.toLocaleString()}원</td>
       <td class="text-muted text-sm">${p.unit>1?`묶음 ${p.unit}개`:'단일'}</td>
       <td class="right mono fw-bold">${unitPrice(p).toLocaleString()}원${p.unit>1?`<div class="text-muted text-sm">${p.cost}÷${p.unit}</div>`:''}</td>
-      <td class="right"><button class="btn btn-sm btn-danger" onclick="delOne(${p.id})">삭제</button></td>
+      <td class="right" style="display:flex;gap:4px;justify-content:flex-end">
+        <button class="btn btn-sm" onclick="openEditModal(${p.id})">수정</button>
+        <button class="btn btn-sm btn-danger" onclick="delOne(${p.id})">삭제</button>
+      </td>
     </tr>`).join('');
   } else {
     const ch=CHANNELS.find(c=>c.key===currentCh);
@@ -239,6 +253,70 @@ function syncUI(){
 }
 
 function clearSel(){sel.clear();renderTable();}
+
+let editingId = null;
+
+async function openEditModal(id) {
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+  editingId = id;
+
+  document.getElementById('em-name').value     = p.name || '';
+  document.getElementById('em-cost').value     = p.cost || '';
+  document.getElementById('em-unit').value     = p.unit || 1;
+  document.getElementById('em-location').value = p.location || '';
+  document.getElementById('em-type').value     = p.type || '국내';
+  document.getElementById('edit-modal-title').textContent = `품목 수정 — ${p.name}`;
+
+  // 카테고리 셀렉트 채우기
+  const cats = await getCategories();
+  const catSel = document.getElementById('em-cat');
+  catSel.innerHTML = cats.map(cat =>
+    `<option ${cat.name===p.category?'selected':''}>${cat.name}</option>`
+  ).join('');
+
+  document.getElementById('edit-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('em-name').focus(), 50);
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').style.display = 'none';
+  editingId = null;
+}
+
+async function saveEditModal() {
+  if (!editingId) return;
+  const name     = document.getElementById('em-name').value.trim();
+  const cat      = document.getElementById('em-cat').value;
+  const type     = document.getElementById('em-type').value;
+  const cost     = parseInt(document.getElementById('em-cost').value) || 0;
+  const unit     = parseInt(document.getElementById('em-unit').value) || 1;
+  const location = document.getElementById('em-location').value.trim();
+
+  if (!name) { showToast('품목명을 입력하세요', 'error'); return; }
+
+  lb(true);
+  const { error } = await sb.from('products').update({
+    name, category: cat, type, cost, unit, location,
+    updated_at: new Date().toISOString()
+  }).eq('id', editingId);
+  lb(false);
+
+  if (error) { showToast('저장 실패: ' + error.message, 'error'); return; }
+
+  // 로컬 데이터 업데이트
+  const p = products.find(x => x.id === editingId);
+  if (p) { p.name=name; p.category=cat; p.type=type; p.cost=cost; p.unit=unit; p.location=location; }
+
+  showToast(`"${name}" 수정됨`);
+  closeEditModal();
+  renderTable();
+}
+
+// ESC 키로 모달 닫기
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && editingId) closeEditModal();
+});
 
 async function delOne(id){
   if(!confirm('이 품목을 삭제하시겠습니까?'))return;
@@ -319,5 +397,47 @@ async function addProd(){
 })();
 loadProducts();
 </script>
+
+<!-- 품목 수정 모달 -->
+<div class="modal-backdrop" id="edit-modal" style="display:none" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal-box">
+    <div class="modal-title" id="edit-modal-title">품목 수정</div>
+    <div class="modal-field">
+      <label>품목명</label>
+      <input type="text" id="em-name" placeholder="품목명">
+    </div>
+    <div class="modal-grid2">
+      <div class="modal-field">
+        <label>카테고리</label>
+        <select id="em-cat"></select>
+      </div>
+      <div class="modal-field">
+        <label>구분</label>
+        <select id="em-type">
+          <option>국내</option>
+          <option>국제</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-grid2">
+      <div class="modal-field">
+        <label>원가 (패키지)</label>
+        <input type="number" id="em-cost" placeholder="0">
+      </div>
+      <div class="modal-field">
+        <label>단위 (1=단일)</label>
+        <input type="number" id="em-unit" placeholder="1" min="1">
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>위치</label>
+      <input type="text" id="em-location" placeholder="예: A-1, 2층 창고">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-sm" onclick="closeEditModal()">취소</button>
+      <button class="btn btn-sm btn-primary" onclick="saveEditModal()">저장</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
