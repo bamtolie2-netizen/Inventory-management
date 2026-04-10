@@ -75,7 +75,7 @@
 /* ── 품목 자동완성 콤보 ── */
 .product-combo{position:relative;flex:1}
 .product-combo input{width:100%;box-sizing:border-box}
-.product-dropdown{position:fixed;background:var(--surface);border:1px solid var(--border2);border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.18);z-index:9999;max-height:220px;overflow-y:auto;display:none;min-width:220px}
+.product-dropdown{position:fixed;background:var(--surface);border:1px solid var(--border2);border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.18);z-index:9999;max-height:220px;overflow-y:scroll;display:none;min-width:220px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .product-dropdown.show{display:block}
 .product-dropdown-item{padding:7px 10px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s}
 .product-dropdown-item:last-child{border-bottom:none}
@@ -515,15 +515,7 @@ function renderProdDropdown(chKey, buyerTid, tid, val) {
 
   ddFocusIdx[tid] = -1;
   dd.classList.add('show');
-  // passive:false 로 등록해야 preventDefault() 가 실제로 동작함
-  if (!dd._wheelBound) {
-    dd.addEventListener('wheel', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      dd.scrollTop += e.deltaY;
-    }, { passive: false });
-    dd._wheelBound = true;
-  }
+  // overscroll-behavior:contain 으로 CSS에서 처리
 }
 
 function setDdFocus(tid, idx) {
