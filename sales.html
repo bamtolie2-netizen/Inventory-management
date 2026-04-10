@@ -10,7 +10,7 @@
 <script src="supabase.js"></script>
 <style>
 /* ── 채널 블록 ── */
-.ch-block{border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:10px;overflow:hidden}
+.ch-block{border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:10px}
 .ch-block-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg);cursor:pointer;user-select:none;transition:background .15s}
 .ch-block-hd:hover{background:var(--bg2)}
 .ch-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
@@ -21,7 +21,7 @@
 .ch-body.open{display:block}
 
 /* ── 주문자 블록 ── */
-.buyer-block{border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;background:var(--surface)}
+.buyer-block{border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;background:var(--surface)}
 .buyer-block.saved-block{border-color:var(--green-bd);background:var(--green-bg)}
 .buyer-block-hd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-bottom:1px solid var(--border)}
 .buyer-block.saved-block .buyer-block-hd{background:var(--green-bg)}
@@ -73,10 +73,10 @@
 .highlight{background:#FEF9C3;border-radius:2px}
 
 /* ── 품목 자동완성 콤보 ── */
-.product-combo{position:relative;flex:1}
 .product-combo input{width:100%;box-sizing:border-box}
-.product-dropdown{position:fixed;background:var(--surface);border:1px solid var(--border2);border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.18);z-index:9999;max-height:220px;overflow-y:auto;display:none;min-width:220px;overscroll-behavior:contain;isolation:isolate}
+.product-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border2);border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.18);z-index:9999;max-height:220px;overflow-y:auto;overscroll-behavior:contain;display:none;min-width:220px}
 .product-dropdown.show{display:block}
+.product-combo{position:relative;flex:1}
 .product-dropdown-item{padding:7px 10px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s}
 .product-dropdown-item:last-child{border-bottom:none}
 .product-dropdown-item:hover,.product-dropdown-item.focused{background:var(--accent-bg);color:var(--accent)}
@@ -466,24 +466,10 @@ function filterProducts(q) {
 }
 
 function showProdDropdown(chKey, buyerTid, tid, val) {
-  // 드롭다운을 body로 이동 (부모 overflow/이벤트 간섭 차단)
-  const dd = document.getElementById('prod-dd-'+tid);
-  if (dd && dd.parentElement !== document.body) {
-    document.body.appendChild(dd);
-  }
-  positionDropdown(tid);
   renderProdDropdown(chKey, buyerTid, tid, val);
 }
 
-function positionDropdown(tid) {
-  const inp = document.getElementById('prod-inp-'+tid);
-  const dd  = document.getElementById('prod-dd-'+tid);
-  if (!inp || !dd) return;
-  const rect = inp.getBoundingClientRect();
-  dd.style.left  = rect.left + 'px';
-  dd.style.top   = (rect.bottom + 4) + 'px';
-  dd.style.width = rect.width + 'px';
-}
+
 
 function hideProdDropdown(tid) {
   // 약간 딜레이 - 클릭 이벤트가 먼저 처리되도록
@@ -495,7 +481,6 @@ function hideProdDropdown(tid) {
 
 function onProdInput(chKey, buyerTid, tid, val) {
   setItem(chKey, buyerTid, tid, 'product', val);
-  positionDropdown(tid);
   renderProdDropdown(chKey, buyerTid, tid, val);
 }
 
@@ -520,17 +505,7 @@ function renderProdDropdown(chKey, buyerTid, tid, val) {
 
   ddFocusIdx[tid] = -1;
   dd.classList.add('show');
-  // passive:false 로 드롭다운 내부 스크롤만 처리
-  if (!dd._wheelBound) {
-    dd.addEventListener('wheel', function(e) {
-      e.stopPropagation();
-      if (this.classList.contains('show')) {
-        e.preventDefault();
-        this.scrollTop += e.deltaY;
-      }
-    }, { passive: false });
-    dd._wheelBound = true;
-  }
+
 }
 
 function setDdFocus(tid, idx) {
