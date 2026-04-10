@@ -71,6 +71,18 @@
 
 /* ── 검색 강조 ── */
 .highlight{background:#FEF9C3;border-radius:2px}
+
+/* ── 실시간 보고서 패널 ── */
+.input-layout{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start}
+@media(max-width:960px){.input-layout{grid-template-columns:1fr}}
+.report-panel{position:sticky;top:calc(var(--top-h) + 16px)}
+.report-type-btns{display:flex;gap:6px;margin-bottom:10px}
+.rtype-btn{flex:1;font-size:12px;font-weight:600;padding:7px 10px;border:1.5px solid var(--border2);border-radius:8px;cursor:pointer;background:var(--surface);color:var(--text2);transition:all .15s;text-align:center}
+.rtype-btn.active{background:var(--text1);color:#fff;border-color:var(--text1)}
+.report-preview{font-family:var(--mono);font-size:12.5px;line-height:1.9;padding:14px 15px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);min-height:180px;white-space:pre-wrap;word-break:break-all;color:var(--text1);max-height:500px;overflow-y:auto}
+.report-empty{color:var(--text3);font-size:12px;font-style:italic}
+.copy-flash{animation:flashBtn .4s ease}
+@keyframes flashBtn{0%,100%{transform:scale(1)}50%{transform:scale(.95)}}
 </style>
 </head>
 <body>
@@ -125,13 +137,36 @@
 
   <!-- ═══ 판매 입력 ═══ -->
   <div id="pane-input">
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-      <span style="font-size:13px;color:var(--text2)">채널을 펼쳐서 주문 내역을 입력하세요. 입력 후 채널별 "저장" 버튼을 누르면 DB에 저장됩니다.</span>
-      <button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="saveAll()">전체 저장</button>
-    </div>
-    <div id="input-channels"></div>
-    <div style="margin-top:12px;padding:12px 16px;background:var(--bg);border-radius:var(--radius);font-size:12.5px;color:var(--text3)">
-      저장된 데이터는 보고서 페이지에서 자동으로 불러옵니다.
+    <div class="input-layout">
+
+      <!-- 왼쪽: 채널 입력 -->
+      <div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+          <span style="font-size:13px;color:var(--text2)">채널을 펼쳐서 주문 내역을 입력하세요.</span>
+          <button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="saveAll()">전체 저장</button>
+        </div>
+        <div id="input-channels"></div>
+      </div>
+
+      <!-- 오른쪽: 실시간 보고서 -->
+      <div class="report-panel">
+        <div class="card">
+          <div class="card-body">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <div style="font-size:13px;font-weight:700">보고서 미리보기</div>
+              <button class="btn btn-sm btn-primary" id="copy-report-btn" onclick="copyLiveReport()">복사</button>
+            </div>
+            <!-- 출근/퇴근 전환 -->
+            <div class="report-type-btns">
+              <div class="rtype-btn active" id="rtype-morning" onclick="setReportType('morning',this)">출근 보고</div>
+              <div class="rtype-btn" id="rtype-evening" onclick="setReportType('evening',this)">퇴근 보고</div>
+            </div>
+            <div class="report-preview" id="live-report"><span class="report-empty">채널에 주문 내역을 입력하면
+자동으로 보고서가 생성됩니다.</span></div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text3)">저장 전에도 미리보기 가능 · 저장 후 보고서 페이지에서도 불러오기 가능</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -184,8 +219,14 @@ const TODAY = new Date().toISOString().slice(0,10);
 document.getElementById('work-date').value = TODAY;
 
 // 날짜가 바뀌면 입력 탭 재렌더
-document.getElementById('work-date').addEventListener('change', () => renderInputChannels());
-document.getElementById('report-type-sel').addEventListener('change', () => renderInputChannels());
+document.getElementById('work-date').addEventListener('change', () => { renderInputChannels(); updateLiveReport(); });
+document.getElementById('report-type-sel').addEventListener('change', function() {
+  liveReportType = this.value;
+  document.querySelectorAll('.rtype-btn').forEach(b => b.classList.remove('active'));
+  const activeBtn = document.getElementById('rtype-'+this.value);
+  if (activeBtn) activeBtn.classList.add('active');
+  renderInputChannels();
+});
 
 // inputData: { chKey: [ {buyerTid, name, items:[{itemTid,product,qty,note,savedId}], savedIds:[]} ] }
 const inputData = {};
@@ -361,7 +402,7 @@ function refreshBuyerHeader(chKey, buyerTid) {
     const statEl = hd.querySelector('span');
     if (statEl) statEl.textContent = `${buyer.items.length}품목 · ${buyer.items.reduce((a,i)=>a+(parseInt(i.qty)||0),0)}개`;
   }
-  updateChStat(chKey);
+  updateChStat(chKey); // updateChStat 내부에서 updateLiveReport 호출됨
 }
 
 function delBuyer(chKey, buyerTid) {
@@ -394,6 +435,96 @@ function updateChStat(chKey) {
   const total = buyers.reduce((a,b) => a + b.items.reduce((s,i) => s+(parseInt(i.qty)||0), 0), 0);
   const el = document.getElementById('chstat-'+chKey);
   if (el) el.textContent = total ? `${total}개 입력` : '입력없음';
+  updateLiveReport();
+}
+
+// ── 실시간 보고서 ───────────────────────────────
+let liveReportType = 'morning';
+
+function setReportType(type, el) {
+  liveReportType = type;
+  document.querySelectorAll('.rtype-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  // report-type-sel 동기화
+  const sel = document.getElementById('report-type-sel');
+  if (sel) sel.value = type;
+  updateLiveReport();
+}
+
+function updateLiveReport() {
+  const el = document.getElementById('live-report');
+  if (!el) return;
+  const date = document.getElementById('work-date').value || TODAY;
+  const now = new Date();
+  const DS = now.toLocaleDateString('ko-KR',{year:'numeric',month:'numeric',day:'numeric',weekday:'short'}).replace(/\. /g,'.').replace('.)',')');
+
+  if (liveReportType === 'morning') {
+    // 출근: 채널별 주문자별 상세
+    const lines = [];
+    let grandTotal = 0;
+    CHANNELS.forEach(ch => {
+      const buyers = (inputData[ch.key]||[]).filter(b => b.items.some(i => i.product || i.qty));
+      if (!buyers.length) return;
+      const chTotal = buyers.reduce((a,b) => a + b.items.reduce((s,i) => s+(parseInt(i.qty)||0),0), 0);
+      grandTotal += chTotal;
+      lines.push(`[${ch.label}]`);
+      buyers.forEach(b => {
+        b.items.filter(i => i.product || i.qty).forEach(item => {
+          let line = `${b.name||'(이름없음)'} - ${item.product||'(품목없음)'}`;
+          if (item.qty) line += ` / ${item.qty}개`;
+          if (item.note) line += ` (${item.note})`;
+          lines.push(line);
+        });
+      });
+    });
+    if (!lines.length) {
+      el.innerHTML = '<span class="report-empty">입력된 주문이 없습니다.</span>';
+      return;
+    }
+    el.textContent = `${DS}
+주문 현황 (총 ${grandTotal}건)
+
+${lines.join('\n')}`;
+  } else {
+    // 퇴근: 품목별 합산
+    const byProduct = {};
+    CHANNELS.forEach(ch => {
+      (inputData[ch.key]||[]).forEach(b => {
+        b.items.filter(i => i.product).forEach(item => {
+          const key = item.product;
+          if (!byProduct[key]) byProduct[key] = { qty:0, notes:[] };
+          byProduct[key].qty += parseInt(item.qty)||0;
+          if (item.note) byProduct[key].notes.push(item.note);
+        });
+      });
+    });
+    const entries = Object.entries(byProduct).filter(([,v]) => v.qty > 0);
+    if (!entries.length) {
+      el.innerHTML = '<span class="report-empty">입력된 주문이 없습니다.</span>';
+      return;
+    }
+    const lines = entries.map(([name, d]) => {
+      let line = `${name} : ${d.qty}개`;
+      if (d.notes.length) line += ` (${d.notes.join(', ')})`;
+      return line;
+    });
+    el.textContent = `${DS}
+
+${lines.join('\n')}`;
+  }
+}
+
+function copyLiveReport() {
+  const el = document.getElementById('live-report');
+  if (!el || !el.textContent || el.querySelector('.report-empty')) {
+    showToast('보고서 내용이 없습니다', 'error'); return;
+  }
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    const btn = document.getElementById('copy-report-btn');
+    const orig = btn.textContent;
+    btn.textContent = '복사됨!'; btn.classList.add('copy-flash');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copy-flash'); }, 1800);
+  }).catch(() => showToast('복사 실패', 'error'));
 }
 
 async function saveCh(chKey) {
