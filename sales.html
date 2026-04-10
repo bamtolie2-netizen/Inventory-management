@@ -75,7 +75,7 @@
 /* ── 품목 자동완성 콤보 ── */
 .product-combo{position:relative;flex:1}
 .product-combo input{width:100%;box-sizing:border-box}
-.product-dropdown{position:fixed;background:var(--surface);border:1px solid var(--border2);border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.18);z-index:9999;max-height:220px;overflow-y:scroll;display:none;min-width:220px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.product-dropdown{position:fixed;background:var(--surface);border:1px solid var(--border2);border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.18);z-index:9999;max-height:220px;overflow-y:auto;display:none;min-width:220px;overscroll-behavior:contain;isolation:isolate}
 .product-dropdown.show{display:block}
 .product-dropdown-item{padding:7px 10px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s}
 .product-dropdown-item:last-child{border-bottom:none}
@@ -466,6 +466,11 @@ function filterProducts(q) {
 }
 
 function showProdDropdown(chKey, buyerTid, tid, val) {
+  // 드롭다운을 body로 이동 (부모 overflow/이벤트 간섭 차단)
+  const dd = document.getElementById('prod-dd-'+tid);
+  if (dd && dd.parentElement !== document.body) {
+    document.body.appendChild(dd);
+  }
   positionDropdown(tid);
   renderProdDropdown(chKey, buyerTid, tid, val);
 }
@@ -515,7 +520,18 @@ function renderProdDropdown(chKey, buyerTid, tid, val) {
 
   ddFocusIdx[tid] = -1;
   dd.classList.add('show');
-  // overscroll-behavior:contain 으로 CSS에서 처리
+  // wheel 이벤트를 capture phase에서 직접 처리
+  if (!dd._wheelBound) {
+    dd.addEventListener('wheel', function(e) {
+      e.stopImmediatePropagation();
+      const scrollable = this.scrollHeight > this.clientHeight;
+      if (!scrollable) return;
+      const up   = e.deltaY < 0 && this.scrollTop === 0;
+      const down = e.deltaY > 0 && this.scrollTop + this.clientHeight >= this.scrollHeight - 1;
+      if (!up && !down) e.preventDefault();
+    }, { passive: false, capture: true });
+    dd._wheelBound = true;
+  }
 }
 
 function setDdFocus(tid, idx) {
