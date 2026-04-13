@@ -132,7 +132,11 @@
           <div class="sales-picker" id="spicker-morning">
             <div class="sales-picker-hd">
               <div class="sales-picker-title">판매관리 내역 선택</div>
-              <input type="date" id="spick-date-m" style="font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1)" onchange="loadSalesPicker('morning')">
+              <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+                <input type="date" id="spick-from-m" style="font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1)" onchange="loadSalesPicker('morning')">
+                <span style="font-size:12px;color:var(--text3)">~</span>
+                <input type="date" id="spick-to-m" style="font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1)" onchange="loadSalesPicker('morning')">
+              </div>
               <button class="btn btn-sm" onclick="applyMorningSales()" style="flex-shrink:0">선택 항목 적용</button>
               <button class="btn btn-sm" onclick="closeSalesPicker('morning')" style="flex-shrink:0">닫기</button>
             </div>
@@ -172,7 +176,11 @@
           <div class="sales-picker" id="spicker-evening">
             <div class="sales-picker-hd">
               <div class="sales-picker-title">판매관리 내역 선택</div>
-              <input type="date" id="spick-date-e" style="font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1)" onchange="loadSalesPicker('evening')">
+              <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+                <input type="date" id="spick-from-e" style="font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1)" onchange="loadSalesPicker('evening')">
+                <span style="font-size:12px;color:var(--text3)">~</span>
+                <input type="date" id="spick-to-e" style="font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1)" onchange="loadSalesPicker('evening')">
+              </div>
               <button class="btn btn-sm" onclick="applyEveningSales()" style="flex-shrink:0">선택 항목 적용</button>
               <button class="btn btn-sm" onclick="closeSalesPicker('evening')" style="flex-shrink:0">닫기</button>
             </div>
@@ -362,7 +370,7 @@ function genMorning(){
   const lines=[];
   let grandTotal=0;
   CHANNELS.forEach(ch=>{
-    const rows=(morningData[ch.key]||[]).filter(r=>r.name||r.item||r.qty);
+    const rows=(morningData[ch.key]||[]).filter(r=>(r.name||r.item)&&(parseInt(r.qty)||0)>0);
     if(!rows.length) return;
     const chTotal=rows.reduce((a,r)=>a+(parseInt(r.qty)||0),0);
     grandTotal+=chTotal;
@@ -479,7 +487,7 @@ function removeCat(ci){
 function genEvening(){
   const lines=[DS];
   eveningData.forEach(cat=>{
-    const filled=cat.items.filter(i=>i.name&&(i.qty||i.note));
+    const filled=cat.items.filter(i=>i.name&&(parseInt(i.qty)||0)>0);
     if(!filled.length) return;
     lines.push(cat.catName);
     filled.forEach(item=>{
@@ -593,9 +601,12 @@ function toggleSalesPicker(type) {
   document.getElementById('spicker-evening').classList.remove('show');
   if (!isShow) {
     el.classList.add('show');
-    // 오늘 날짜 기본값
-    const dateEl = document.getElementById('spick-date-'+( type==='morning'?'m':'e' ));
-    if (!dateEl.value) dateEl.value = TODAY;
+    // 오늘 날짜 기본값 (시작일=종료일=오늘)
+    const sfx = type === 'morning' ? 'm' : 'e';
+    const fromEl = document.getElementById('spick-from-'+sfx);
+    const toEl   = document.getElementById('spick-to-'+sfx);
+    if (!fromEl.value) fromEl.value = TODAY;
+    if (!toEl.value)   toEl.value   = TODAY;
     loadSalesPicker(type);
   }
 }
@@ -606,27 +617,32 @@ function closeSalesPicker(type) {
 
 async function loadSalesPicker(type) {
   const sfx = type === 'morning' ? 'm' : 'e';
-  const date = document.getElementById('spick-date-'+sfx).value;
-  const bodyEl = document.getElementById('spick-body-'+sfx);
-  if (!date) return;
+  const dateFrom = document.getElementById('spick-from-'+sfx).value;
+  const dateTo   = document.getElementById('spick-to-'+sfx).value;
+  const bodyEl   = document.getElementById('spick-body-'+sfx);
+  if (!dateFrom) return;
 
+  const rangeLabel = dateFrom === dateTo ? dateFrom : `${dateFrom} ~ ${dateTo||dateFrom}`;
   bodyEl.innerHTML = '<div class="spick-empty">불러오는 중...</div>';
   lb(true);
-  const rows = await getSales({ date });
+  const rows = await getSales({ dateFrom, dateTo: dateTo||dateFrom, limit: 999 });
   lb(false);
   pickerSalesData[type] = rows;
 
   if (!rows.length) {
-    bodyEl.innerHTML = `<div class="spick-empty">${date} 에 저장된 판매 내역이 없습니다</div>`;
+    bodyEl.innerHTML = `<div class="spick-empty">${rangeLabel} 에 저장된 판매 내역이 없습니다</div>`;
     return;
   }
 
-  // 채널별 그룹
-  const grouped = {};
+  // 날짜별 → 채널별 그룹
+  const byDate = {};
   rows.forEach(r => {
-    if (!grouped[r.channel]) grouped[r.channel] = [];
-    grouped[r.channel].push(r);
+    if (!byDate[r.date]) byDate[r.date] = {};
+    if (!byDate[r.date][r.channel]) byDate[r.date][r.channel] = [];
+    byDate[r.date][r.channel].push(r);
   });
+
+  const multiDate = Object.keys(byDate).length > 1;
 
   bodyEl.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
@@ -635,26 +651,29 @@ async function loadSalesPicker(type) {
       </label>
       <span style="font-size:12px;color:var(--text3);margin-left:auto">${rows.length}건</span>
     </div>
-    ${Object.entries(grouped).map(([chKey, chRows]) => {
-      const ch = CHANNELS.find(c => c.key === chKey);
-      return `<div class="spick-group">
-        <div class="spick-group-hd">
-          <input type="checkbox" class="spick-ch-cb" data-sfx="${sfx}" onchange="spickToggleCh('${sfx}','${chKey}',this.checked)">
-          <span style="width:7px;height:7px;border-radius:50%;background:${ch?.color||'#888'};display:inline-block;flex-shrink:0"></span>
-          <span class="spick-group-label">${ch?.label||chKey} (${chRows.length}건)</span>
-        </div>
-        ${chRows.map(r => `
-          <div class="spick-item">
-            <input type="checkbox" class="spick-cb" data-sfx="${sfx}" data-id="${r.id}" checked>
-            <label onclick="this.previousElementSibling.click()">
-              <span style="font-weight:600">${r.buyer_name||'(이름없음)'}</span>
-              — ${r.product_name}
-              ${r.quantity ? `<span style="color:var(--accent);font-weight:600"> / ${r.quantity}개</span>` : ''}
-              ${r.note ? `<span style="color:var(--text3);font-size:11px"> (${r.note})</span>` : ''}
-            </label>
-          </div>`).join('')}
-      </div>`;
-    }).join('')}
+    ${Object.entries(byDate).sort(([a],[b])=>a.localeCompare(b)).map(([date, chMap]) => `
+      ${multiDate ? `<div style="font-size:11px;font-weight:700;color:var(--accent);padding:6px 0 4px;border-bottom:1px solid var(--border);margin-bottom:6px">${date}</div>` : ''}
+      ${Object.entries(chMap).map(([chKey, chRows]) => {
+        const ch = CHANNELS.find(c => c.key === chKey);
+        return `<div class="spick-group">
+          <div class="spick-group-hd">
+            <input type="checkbox" class="spick-ch-cb" data-sfx="${sfx}" onchange="spickToggleChDate('${sfx}','${chKey}','${date}',this.checked)">
+            <span style="width:7px;height:7px;border-radius:50%;background:${ch?.color||'#888'};display:inline-block;flex-shrink:0"></span>
+            <span class="spick-group-label">${ch?.label||chKey} (${chRows.length}건)</span>
+          </div>
+          ${chRows.map(r => `
+            <div class="spick-item">
+              <input type="checkbox" class="spick-cb" data-sfx="${sfx}" data-id="${r.id}" checked>
+              <label onclick="this.previousElementSibling.click()">
+                <span style="font-weight:600">${r.buyer_name||'(이름없음)'}</span>
+                — ${r.product_name}
+                ${r.quantity ? `<span style="color:var(--accent);font-weight:600"> / ${r.quantity}개</span>` : ''}
+                ${r.note ? `<span style="color:var(--text3);font-size:11px"> (${r.note})</span>` : ''}
+              </label>
+            </div>`).join('')}
+        </div>`;
+      }).join('')}
+    `).join('')}
   `;
 }
 
@@ -672,10 +691,20 @@ function spickToggleCh(sfx, chKey, checked) {
     });
 }
 
+function spickToggleChDate(sfx, chKey, date, checked) {
+  pickerSalesData[sfx==='m'?'morning':'evening']
+    .filter(r => r.channel === chKey && r.date === date)
+    .forEach(r => {
+      const cb = document.querySelector(`.spick-cb[data-id="${r.id}"]`);
+      if (cb) cb.checked = checked;
+    });
+}
+
 function getSelectedSales(sfx) {
   const type = sfx === 'm' ? 'morning' : 'evening';
-  const checked = new Set([...document.querySelectorAll(`.spick-cb[data-sfx="${sfx}"]:checked`)].map(cb => parseInt(cb.dataset.id)));
-  return pickerSalesData[type].filter(r => checked.has(r.id));
+  // id를 string으로 비교 (DB에서 오는 id 타입 불일치 방지)
+  const checked = new Set([...document.querySelectorAll(`.spick-cb[data-sfx="${sfx}"]:checked`)].map(cb => String(cb.dataset.id)));
+  return pickerSalesData[type].filter(r => checked.has(String(r.id)));
 }
 
 function applyMorningSales() {
@@ -694,7 +723,7 @@ function applyMorningSales() {
       savedId: r.id,
     });
   });
-  initMorning();
+  renderMorningChannels();  // initMorning 대신 직접 렌더 (localStorage 덮어쓰기 방지)
   closeSalesPicker('morning');
   showToast(`${selected.length}건 적용됨 — 자동 생성 버튼을 누르세요`);
 }
