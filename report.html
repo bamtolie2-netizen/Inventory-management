@@ -13,6 +13,20 @@
 .report-out:focus{border-color:var(--accent);background:var(--surface)}
 .copy-flash{animation:flashBtn .4s ease}
 @keyframes flashBtn{0%,100%{transform:scale(1)}50%{transform:scale(0.96)}}
+/* ── 판매관리 선택 패널 ── */
+.sales-picker{border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:12px;display:none}
+.sales-picker.show{display:block}
+.sales-picker-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.sales-picker-title{font-size:13px;font-weight:700;flex-shrink:0}
+.spick-group{margin-bottom:8px}
+.spick-group-hd{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);margin-bottom:4px;cursor:pointer}
+.spick-group-label{font-size:11.5px;font-weight:700;color:var(--text2);flex:1}
+.spick-item{display:flex;align-items:flex-start;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer}
+.spick-item:hover{background:var(--bg)}
+.spick-item label{font-size:12.5px;flex:1;cursor:pointer;line-height:1.5}
+.spick-ch-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.spick-body{padding:10px 14px;max-height:260px;overflow-y:auto}
+.spick-empty{font-size:13px;color:var(--text3);text-align:center;padding:20px 0}
 .chk-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
 .chk-item:last-child{border-bottom:none}
 .chk{width:18px;height:18px;border:1.5px solid var(--border2);border-radius:4px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:all .15s}
@@ -107,10 +121,22 @@
               <div class="card-title">출근 보고</div>
               <div class="card-sub" id="morning-date"></div>
             </div>
-            <div style="display:flex;gap:6px">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-sm" style="background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)" onclick="toggleSalesPicker('morning')">판매관리에서 선택</button>
               <button class="btn btn-sm" onclick="genMorning()">자동 생성</button>
               <button class="btn btn-sm btn-primary" id="cp-m" onclick="copyReport('rep-m','cp-m')">복사</button>
             </div>
+          </div>
+
+          <!-- 판매관리 선택 패널 (출근) -->
+          <div class="sales-picker" id="spicker-morning">
+            <div class="sales-picker-hd">
+              <div class="sales-picker-title">판매관리 내역 선택</div>
+              <input type="date" id="spick-date-m" style="font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1)" onchange="loadSalesPicker('morning')">
+              <button class="btn btn-sm" onclick="applyMorningSales()" style="flex-shrink:0">선택 항목 적용</button>
+              <button class="btn btn-sm" onclick="closeSalesPicker('morning')" style="flex-shrink:0">닫기</button>
+            </div>
+            <div class="spick-body" id="spick-body-m"><div class="spick-empty">날짜를 선택하면 판매 내역이 표시됩니다</div></div>
           </div>
 
           <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">
@@ -135,10 +161,22 @@
               <div class="card-title">퇴근 보고</div>
               <div class="card-sub" id="evening-date"></div>
             </div>
-            <div style="display:flex;gap:6px">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-sm" style="background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)" onclick="toggleSalesPicker('evening')">판매관리에서 선택</button>
               <button class="btn btn-sm" onclick="genEvening()">자동 생성</button>
               <button class="btn btn-sm btn-primary" id="cp-e" onclick="copyReport('rep-e','cp-e')">복사</button>
             </div>
+          </div>
+
+          <!-- 판매관리 선택 패널 (퇴근) -->
+          <div class="sales-picker" id="spicker-evening">
+            <div class="sales-picker-hd">
+              <div class="sales-picker-title">판매관리 내역 선택</div>
+              <input type="date" id="spick-date-e" style="font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text1)" onchange="loadSalesPicker('evening')">
+              <button class="btn btn-sm" onclick="applyEveningSales()" style="flex-shrink:0">선택 항목 적용</button>
+              <button class="btn btn-sm" onclick="closeSalesPicker('evening')" style="flex-shrink:0">닫기</button>
+            </div>
+            <div class="spick-body" id="spick-body-e"><div class="spick-empty">날짜를 선택하면 판매 내역이 표시됩니다</div></div>
           </div>
 
           <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">
@@ -543,58 +581,146 @@ function renderQuickStats(){
 // INIT
 // ──────────────────────────────────────────────
 // ──────────────────────────────────────────────
-// 판매관리 데이터 불러오기
+// 판매관리 선택해서 불러오기
 // ──────────────────────────────────────────────
-async function importFromSales(reportType) {
+let pickerSalesData = { morning: [], evening: [] };
+
+function toggleSalesPicker(type) {
+  const el = document.getElementById('spicker-'+type);
+  const isShow = el.classList.contains('show');
+  // 둘 다 닫고
+  document.getElementById('spicker-morning').classList.remove('show');
+  document.getElementById('spicker-evening').classList.remove('show');
+  if (!isShow) {
+    el.classList.add('show');
+    // 오늘 날짜 기본값
+    const dateEl = document.getElementById('spick-date-'+( type==='morning'?'m':'e' ));
+    if (!dateEl.value) dateEl.value = TODAY;
+    loadSalesPicker(type);
+  }
+}
+
+function closeSalesPicker(type) {
+  document.getElementById('spicker-'+type).classList.remove('show');
+}
+
+async function loadSalesPicker(type) {
+  const sfx = type === 'morning' ? 'm' : 'e';
+  const date = document.getElementById('spick-date-'+sfx).value;
+  const bodyEl = document.getElementById('spick-body-'+sfx);
+  if (!date) return;
+
+  bodyEl.innerHTML = '<div class="spick-empty">불러오는 중...</div>';
   lb(true);
-  const date = NOW.toISOString().slice(0,10);
-  const rows = await getSalesForReport(date, reportType);
+  const rows = await getSales({ date });
   lb(false);
+  pickerSalesData[type] = rows;
 
   if (!rows.length) {
-    showToast(`판매관리에 저장된 ${reportType==='morning'?'출근':'퇴근'} 데이터가 없습니다`, 'error');
+    bodyEl.innerHTML = `<div class="spick-empty">${date} 에 저장된 판매 내역이 없습니다</div>`;
     return;
   }
 
-  if (reportType === 'morning') {
-    // 채널별로 morningData에 채워넣기
-    CHANNELS.forEach(ch => { morningData[ch.key] = []; });
-    rows.forEach(r => {
-      if (!morningData[r.channel]) morningData[r.channel] = [];
-      morningData[r.channel].push({
-        tempId: ++window._tid || (window._tid = 1),
-        name: r.buyer_name || '',
-        item: r.product_name || '',
-        qty: r.quantity || '',
-        note: r.note || '',
-        savedId: r.id,
-      });
+  // 채널별 그룹
+  const grouped = {};
+  rows.forEach(r => {
+    if (!grouped[r.channel]) grouped[r.channel] = [];
+    grouped[r.channel].push(r);
+  });
+
+  bodyEl.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+        <input type="checkbox" id="spick-all-${sfx}" onchange="spickToggleAll('${sfx}',this.checked)"> 전체 선택
+      </label>
+      <span style="font-size:12px;color:var(--text3);margin-left:auto">${rows.length}건</span>
+    </div>
+    ${Object.entries(grouped).map(([chKey, chRows]) => {
+      const ch = CHANNELS.find(c => c.key === chKey);
+      return `<div class="spick-group">
+        <div class="spick-group-hd">
+          <input type="checkbox" class="spick-ch-cb" data-sfx="${sfx}" onchange="spickToggleCh('${sfx}','${chKey}',this.checked)">
+          <span style="width:7px;height:7px;border-radius:50%;background:${ch?.color||'#888'};display:inline-block;flex-shrink:0"></span>
+          <span class="spick-group-label">${ch?.label||chKey} (${chRows.length}건)</span>
+        </div>
+        ${chRows.map(r => `
+          <div class="spick-item">
+            <input type="checkbox" class="spick-cb" data-sfx="${sfx}" data-id="${r.id}" checked>
+            <label onclick="this.previousElementSibling.click()">
+              <span style="font-weight:600">${r.buyer_name||'(이름없음)'}</span>
+              — ${r.product_name}
+              ${r.quantity ? `<span style="color:var(--accent);font-weight:600"> / ${r.quantity}개</span>` : ''}
+              ${r.note ? `<span style="color:var(--text3);font-size:11px"> (${r.note})</span>` : ''}
+            </label>
+          </div>`).join('')}
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function spickToggleAll(sfx, checked) {
+  document.querySelectorAll(`.spick-cb[data-sfx="${sfx}"]`).forEach(cb => cb.checked = checked);
+  document.querySelectorAll(`.spick-ch-cb[data-sfx="${sfx}"]`).forEach(cb => cb.checked = checked);
+}
+
+function spickToggleCh(sfx, chKey, checked) {
+  pickerSalesData[sfx==='m'?'morning':'evening']
+    .filter(r => r.channel === chKey)
+    .forEach(r => {
+      const cb = document.querySelector(`.spick-cb[data-id="${r.id}"]`);
+      if (cb) cb.checked = checked;
     });
-    initMorning();
-    showToast(`출근 보고 ${rows.length}건 불러옴 — 자동 생성 버튼을 눌러주세요`);
+}
+
+function getSelectedSales(sfx) {
+  const type = sfx === 'm' ? 'morning' : 'evening';
+  const checked = new Set([...document.querySelectorAll(`.spick-cb[data-sfx="${sfx}"]:checked`)].map(cb => parseInt(cb.dataset.id)));
+  return pickerSalesData[type].filter(r => checked.has(r.id));
+}
+
+function applyMorningSales() {
+  const selected = getSelectedSales('m');
+  if (!selected.length) { showToast('선택된 항목이 없습니다', 'error'); return; }
+
+  CHANNELS.forEach(ch => { morningData[ch.key] = []; });
+  selected.forEach(r => {
+    if (!morningData[r.channel]) morningData[r.channel] = [];
+    morningData[r.channel].push({
+      tempId: ++window._tid || (window._tid = 1),
+      name: r.buyer_name || '',
+      item: r.product_name || '',
+      qty: r.quantity || '',
+      note: r.note || '',
+      savedId: r.id,
+    });
+  });
+  initMorning();
+  closeSalesPicker('morning');
+  showToast(`${selected.length}건 적용됨 — 자동 생성 버튼을 누르세요`);
+}
+
+function applyEveningSales() {
+  const selected = getSelectedSales('e');
+  if (!selected.length) { showToast('선택된 항목이 없습니다', 'error'); return; }
+
+  const byProduct = {};
+  selected.forEach(r => {
+    if (!byProduct[r.product_name]) byProduct[r.product_name] = { qty:0, notes:[] };
+    byProduct[r.product_name].qty += r.quantity;
+    if (r.note) byProduct[r.product_name].notes.push(r.note);
+  });
+  const importedItems = Object.entries(byProduct).map(([name, d]) => ({
+    name, qty: d.qty, note: d.notes.join(', ')
+  }));
+  const importCat = eveningData.find(c => c.catName.includes('판매관리'));
+  if (importCat) {
+    importCat.items = importedItems;
   } else {
-    // 퇴근 — 품목별로 eveningData에 합산
-    const byProduct = {};
-    rows.forEach(r => {
-      const key = r.product_name;
-      if (!byProduct[key]) byProduct[key] = { qty:0, notes:[] };
-      byProduct[key].qty += r.quantity;
-      if (r.note) byProduct[key].notes.push(r.note);
-    });
-    // 기타 카테고리에 병합
-    const importedItems = Object.entries(byProduct).map(([name, d]) => ({
-      name, qty: d.qty, note: d.notes.join(', ')
-    }));
-    // eveningData 마지막 카테고리(기타)에 추가하거나 새 카테고리로
-    const importCat = eveningData.find(c => c.catName.includes('판매관리'));
-    if (importCat) {
-      importCat.items = importedItems;
-    } else {
-      eveningData.push({ catName: `판매관리 불러오기 (${date})`, items: importedItems });
-    }
-    renderEveningCats();
-    showToast(`퇴근 보고 ${rows.length}건 불러옴 — 자동 생성 버튼을 눌러주세요`);
+    eveningData.push({ catName: '판매관리 불러오기', items: importedItems });
   }
+  renderEveningCats();
+  closeSalesPicker('evening');
+  showToast(`${selected.length}건 적용됨 — 자동 생성 버튼을 누르세요`);
 }
 
 async function loadData(){
