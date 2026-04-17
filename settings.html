@@ -68,6 +68,10 @@
     <a href="report.html"    class="nav-link">보고서</a>
     <a href="settings.html"  class="nav-link">설정</a>
   </div>
+  <div class="biz-toggle">
+    <button class="biz-tab" data-type="market"  onclick="onBizTab('market')">오픈마켓</button>
+    <button class="biz-tab" data-type="academy" onclick="onBizTab('academy')">학원출결</button>
+  </div>
   <div class="topbar-right"><span id="clock"></span></div>
 </nav>
 <script>
@@ -183,19 +187,29 @@
     <!-- ── 오른쪽 ── -->
     <div>
 
-      <!-- 판매 채널 목록 -->
+      <!-- 판매처(채널) 관리 -->
       <div class="setting-card">
         <div class="setting-card-hd">
           <div>
-            <div class="setting-card-title">판매 채널</div>
-            <div class="setting-card-sub">현재 시스템에 등록된 채널 목록</div>
+            <div class="setting-card-title">판매처(채널) 관리</div>
+            <div class="setting-card-sub">오픈마켓 / 학원출결 채널 추가·수정·삭제</div>
           </div>
+          <span id="ch-total" style="font-size:12px;color:var(--text3)"></span>
         </div>
         <div class="setting-card-body">
-          <div id="channel-list"></div>
-          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--text3)">
-            채널 추가/삭제는 개발자 수정이 필요합니다 (supabase.js의 CHANNELS 상수).
+          <!-- 채널 추가 -->
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+            <input type="text" id="new-ch-key"   placeholder="키 (영문, 예: academy1)" style="width:130px;font-size:12.5px;padding:7px 10px">
+            <input type="text" id="new-ch-label" placeholder="이름 (예: 학원직납)" style="flex:1;min-width:100px;font-size:12.5px;padding:7px 10px">
+            <input type="color" id="new-ch-color" value="#888888" style="width:44px;height:36px;padding:3px;border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer">
+            <select id="new-ch-btype" style="font-size:12.5px;padding:7px 10px">
+              <option value="market">오픈마켓</option>
+              <option value="academy">학원출결</option>
+              <option value="both">공통</option>
+            </select>
+            <button class="btn btn-primary" onclick="addCh()">추가</button>
           </div>
+          <div id="ch-mgmt-list"></div>
         </div>
       </div>
 
@@ -339,17 +353,53 @@ async function deleteCat(id, name) {
 }
 
 // ──────────────────────────────────────────────
-// 채널 목록
+// 채널 관리
 // ──────────────────────────────────────────────
 function renderChannels() {
-  document.getElementById('channel-list').innerHTML = CHANNELS.map(ch => `
-    <div class="channel-item">
-      <div class="ch-color-dot" style="background:${ch.color}"></div>
+  // 구채널 목록은 ch-mgmt-list로 대체됨
+}
+
+async function loadChMgmt() {
+  await loadChannels();
+  const el = document.getElementById('ch-mgmt-list');
+  const cnt = document.getElementById('ch-total');
+  if (!el) return;
+  if (cnt) cnt.textContent = `${CHANNELS.length}개`;
+  const btypeLabel = { market:'오픈마켓', academy:'학원출결', both:'공통' };
+  el.innerHTML = CHANNELS.map(ch => `
+    <div class="channel-item" id="chrow-${ch.id}">
+      <input type="color" value="${ch.color}" style="width:28px;height:28px;padding:2px;border:1px solid var(--border2);border-radius:6px;cursor:pointer;flex-shrink:0"
+        onchange="updateChannel(${ch.id},{color:this.value}).then(loadChMgmt)">
       <div class="ch-key">${ch.key}</div>
       <div style="flex:1;font-size:13px;font-weight:600">${ch.label}</div>
-      <div style="width:14px;height:14px;border-radius:3px;background:${ch.color}40;border:1px solid ${ch.color}60;flex-shrink:0"></div>
-    </div>
-  `).join('');
+      <span class="badge ${ch.business_type==='market'?'badge-info':ch.business_type==='academy'?'badge-purple':'badge-gray'}" style="font-size:11px">
+        ${btypeLabel[ch.business_type]||ch.business_type}
+      </span>
+      <button class="btn btn-sm btn-danger" onclick="deleteCh(${ch.id},'${ch.label}')">삭제</button>
+    </div>`).join('');
+}
+
+async function addCh() {
+  const key   = document.getElementById('new-ch-key').value.trim();
+  const label = document.getElementById('new-ch-label').value.trim();
+  const color = document.getElementById('new-ch-color').value;
+  const btype = document.getElementById('new-ch-btype').value;
+  if (!key || !label) { showToast('키와 이름을 입력하세요','error'); return; }
+  if (!/^[a-z0-9_]+$/.test(key)) { showToast('키는 영문 소문자/숫자/언더스코어만 가능','error'); return; }
+  lb(true);
+  await addChannel({ key, label, color, business_type: btype });
+  lb(false);
+  document.getElementById('new-ch-key').value='';
+  document.getElementById('new-ch-label').value='';
+  await loadChMgmt();
+}
+
+async function deleteCh(id, label) {
+  if (!confirm(`"${label}" 채널을 삭제하시겠습니까?`)) return;
+  lb(true);
+  await deleteChannel(id);
+  lb(false);
+  await loadChMgmt();
 }
 
 // ──────────────────────────────────────────────
@@ -388,7 +438,7 @@ async function loadSystemStats() {
 // ──────────────────────────────────────────────
 // INIT
 // ──────────────────────────────────────────────
-renderChannels();
+loadChMgmt();
 loadCats();
 loadSystemStats();
 loadUsers();

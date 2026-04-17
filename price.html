@@ -49,6 +49,10 @@
     <a href="report.html"    class="nav-link">보고서</a>
     <a href="settings.html"  class="nav-link">설정</a>
   </div>
+  <div class="biz-toggle">
+    <button class="biz-tab" data-type="market"  onclick="onBizTab('market')">오픈마켓</button>
+    <button class="biz-tab" data-type="academy" onclick="onBizTab('academy')">학원출결</button>
+  </div>
   <div class="topbar-right"><span id="clock"></span></div>
 </nav>
 <script>
@@ -81,6 +85,7 @@
       <div class="bulk-bar" id="bulk-bar">
         <span class="count" id="bulk-count">0개 선택</span>
         <button class="btn-bulk danger" onclick="deleteSelected()">선택 삭제</button>
+        <button class="btn-bulk" onclick="moveToBiz()" style="background:rgba(124,58,237,.15);border-color:#C4B5FD;color:#7C3AED" id="move-btn">다른 분류로 이동</button>
         <button class="btn-bulk" onclick="clearSel()" style="margin-left:auto">선택 해제</button>
       </div>
 
@@ -386,7 +391,7 @@ async function addProd(){
   const name=document.getElementById('s-name').value.trim();
   if(!name){showToast('품목명을 입력하세요','error');return;}
   const btn=document.getElementById('add-btn');btn.disabled=true;btn.textContent='등록 중...';
-  const result=await addProduct({name,category:document.getElementById('s-cat').value,type:document.getElementById('s-type').value,cost:parseInt(document.getElementById('s-cost').value)||0,unit:parseInt(document.getElementById('s-unit').value)||1});
+  const result=await addProduct({name,category:document.getElementById('s-cat').value,type:document.getElementById('s-type').value,cost:parseInt(document.getElementById('s-cost').value)||0,unit:parseInt(document.getElementById('s-unit').value)||1,business_type:localStorage.getItem('biz_type')||'market'});
   btn.disabled=false;btn.textContent='품목 등록';
   if(result){document.getElementById('s-name').value='';document.getElementById('s-cost').value='';document.getElementById('s-unit').value='1';await loadProducts();}
 }
@@ -396,7 +401,33 @@ async function addProd(){
   await fillCategorySelects(['cat-f']);
   await fillCategorySelectsNoAll(['s-cat']);
 })();
-loadProducts();
+// 비즈니스 타입 배너
+(function(){
+  var bt = localStorage.getItem('biz_type')||'market';
+  var label = bt==='market'?'오픈마켓':'학원출결';
+  var banner = document.createElement('div');
+  banner.className = 'biz-banner '+bt;
+  banner.textContent = '현재: '+label+' 품목';
+  var pt = document.querySelector('.page-title');
+  if(pt) pt.parentNode.insertBefore(banner, pt.nextSibling.nextSibling);
+})();
+
+// 이동 함수
+async function moveToBiz(){
+  if(!sel.size){ showToast('선택된 항목이 없습니다','error'); return; }
+  var cur = localStorage.getItem('biz_type')||'market';
+  var target = cur==='market'?'academy':'market';
+  var targetLabel = target==='market'?'오픈마켓':'학원출결';
+  if(!confirm('선택한 '+sel.size+'개 품목을 '+targetLabel+'으로 이동하시겠습니까?')) return;
+  lb(true);
+  await moveProductBizType([...sel], target);
+  lb(false);
+  products = products.filter(p=>!sel.has(p.id));
+  sel.clear();
+  renderTable();
+}
+
+loadChannels().then(() => loadProducts());
 </script>
 
 <!-- 품목 수정 모달 -->
@@ -441,5 +472,12 @@ loadProducts();
   </div>
 </div>
 <script>requireAuth().then(u=>{ if(u) applyRoleUI(); });</script>
+<script>
+(function(){
+  var cur = localStorage.getItem('biz_type')||'market';
+  var btn = document.getElementById('move-btn');
+  if(btn) btn.textContent = cur==='market'?'학원출결로 이동':'오픈마켓으로 이동';
+})();
+</script>
 </body>
 </html>

@@ -51,6 +51,24 @@ a { text-decoration: none; color: inherit; }
 .topbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
 #clock { font-family: var(--mono); font-size: 12px; color: var(--text3); }
 
+/* ── Business Type Toggle ────────────────────────────────────── */
+.biz-toggle { display:flex; gap:2px; background:var(--bg2); border-radius:8px; padding:3px; flex-shrink:0; }
+.biz-tab {
+  font-size:12px; font-weight:600; padding:5px 14px; border-radius:6px;
+  cursor:pointer; border:none; background:none; color:var(--text3);
+  transition:all .15s; white-space:nowrap;
+}
+.biz-tab.active { background:var(--surface); color:var(--text1); box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.biz-tab[data-type="market"].active  { color:#03C75A; }
+.biz-tab[data-type="academy"].active { color:#7C3AED; }
+/* 비즈니스 타입 표시 배너 */
+.biz-banner {
+  font-size:11px; font-weight:600; padding:2px 10px; border-radius:20px;
+  margin-bottom:12px; display:inline-flex; align-items:center; gap:5px;
+}
+.biz-banner.market  { background:#F0FDF4; color:#15803D; border:1px solid #BBF7D0; }
+.biz-banner.academy { background:#F5F3FF; color:#6D28D9; border:1px solid #DDD6FE; }
+
 /* ── Loading bar ─────────────────────────────────────────────── */
 #loading-bar {
   position: fixed; top: var(--top-h); left: 0; height: 2px; width: 0%;

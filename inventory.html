@@ -41,6 +41,10 @@
     <a href="report.html"    class="nav-link">보고서</a>
     <a href="settings.html"  class="nav-link">설정</a>
   </div>
+  <div class="biz-toggle">
+    <button class="biz-tab" data-type="market"  onclick="onBizTab('market')">오픈마켓</button>
+    <button class="biz-tab" data-type="academy" onclick="onBizTab('academy')">학원출결</button>
+  </div>
   <div class="topbar-right"><span id="clock"></span></div>
 </nav>
 <script>
@@ -544,7 +548,17 @@ async function delWH(id) {
   await fillCategorySelects(['ov-cat','st-cat']);
   await fillCategorySelectsNoAll(['s-cat']);
 })();
-loadAll().then(() => renderOverview());
+// 배너
+(function(){
+  var bt=localStorage.getItem('biz_type')||'market';
+  var label=bt==='market'?'오픈마켓':'학원출결';
+  var banner=document.createElement('div');
+  banner.className='biz-banner '+bt;
+  banner.textContent='현재: '+label+' 품목';
+  var pt=document.querySelector('.page-title');
+  if(pt) pt.parentNode.insertBefore(banner, pt.nextSibling.nextSibling);
+})();
+loadChannels().then(() => loadAll().then(() => renderOverview()));
 if(location.hash==='#stocktake') switchTab('stocktake',document.getElementById('tab-stocktake'));
 </script>
 <script>requireAuth().then(u=>{ if(u) applyRoleUI(); });</script>

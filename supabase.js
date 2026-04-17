@@ -3,8 +3,8 @@
 // !! 아래 두 값을 본인 Supabase 프로젝트 값으로 교체하세요 !!
 // ================================================================
 
-const SUPABASE_URL = 'https://qqisudyfktpnakldgrls.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxaXN1ZHlma3RwbmFrbGRncmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTMxOTMsImV4cCI6MjA5MTAyOTE5M30.MWir7d_xbGU2ptnddl4JCHMBudZH1LK9kmOhBl-4dSA';
+const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
 
 // Supabase JS CDN 클라이언트 (index.html 등에서 script 태그로 로드)
 // <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -35,17 +35,81 @@ function setLoading(id, on) {
 }
 
 // ================================================================
-// CHANNELS 상수
+// CHANNELS - DB에서 동적 로드 (폴백용 기본값)
 // ================================================================
-const CHANNELS = [
-  { key: 'naver',    label: '네이버',     color: '#03C75A' },
-  { key: 'coupang',  label: '쿠팡',       color: '#E8232A' },
-  { key: 'esm',      label: 'G마켓/옥션', color: '#0032A0' },
-  { key: 'elevenst', label: '11번가',     color: '#e5001d' },
-  { key: 'cafe24',   label: '카페24',     color: '#0040FF' },
-  { key: 'toss',     label: 'Toss',       color: '#3182F6' },
-  { key: 'easy',     label: '이지판매',   color: '#7C3AED' },
+let CHANNELS = [
+  { key: 'naver',    label: '네이버',     color: '#03C75A', business_type: 'market' },
+  { key: 'coupang',  label: '쿠팡',       color: '#E8232A', business_type: 'market' },
+  { key: 'esm',      label: 'G마켓/옥션', color: '#0032A0', business_type: 'market' },
+  { key: 'elevenst', label: '11번가',     color: '#e5001d', business_type: 'market' },
+  { key: 'cafe24',   label: '카페24',     color: '#0040FF', business_type: 'market' },
+  { key: 'toss',     label: 'Toss',       color: '#3182F6', business_type: 'market' },
+  { key: 'easy',     label: '이지판매',   color: '#7C3AED', business_type: 'market' },
 ];
+
+// ── 비즈니스 타입 전역 상태 ─────────────────────────────────
+// 'market' = 오픈마켓, 'academy' = 학원출결
+let BUSINESS_TYPE = localStorage.getItem('biz_type') || 'market';
+
+function setBizType(type) {
+  BUSINESS_TYPE = type;
+  localStorage.setItem('biz_type', type);
+  // 탭 UI 업데이트
+  document.querySelectorAll('.biz-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.type === type);
+  });
+}
+
+function getBizType() { return BUSINESS_TYPE; }
+
+// 채널 DB에서 로드
+async function loadChannels() {
+  const { data, error } = await sb.from('channels')
+    .select('*').eq('is_active', true).order('sort_order');
+  if (!error && data && data.length) {
+    CHANNELS = data.map(c => ({
+      key: c.key, label: c.label, color: c.color,
+      business_type: c.business_type, id: c.id
+    }));
+  }
+  return CHANNELS;
+}
+
+// 현재 타입에 맞는 채널만 반환
+function getActiveChannels() {
+  return CHANNELS.filter(c =>
+    c.business_type === BUSINESS_TYPE || c.business_type === 'both'
+  );
+}
+
+// 채널 CRUD
+async function addChannel({ key, label, color, business_type, sort_order }) {
+  const { data, error } = await sb.from('channels')
+    .insert({ key, label, color, business_type, sort_order: sort_order||0 })
+    .select().single();
+  if (error) return handleError('채널 추가', error);
+  showToast(`"${label}" 채널 추가됨`);
+  return data;
+}
+async function updateChannel(id, fields) {
+  const { error } = await sb.from('channels').update(fields).eq('id', id);
+  if (error) return handleError('채널 수정', error);
+  showToast('저장됨');
+}
+async function deleteChannel(id) {
+  const { error } = await sb.from('channels').delete().eq('id', id);
+  if (error) return handleError('채널 삭제', error);
+  showToast('삭제됨');
+}
+
+// 품목 비즈니스 타입 변경
+async function moveProductBizType(ids, business_type) {
+  const { error } = await sb.from('products')
+    .update({ business_type })
+    .in('id', ids);
+  if (error) return handleError('품목 이동', error);
+  showToast(`${ids.length}개 품목을 ${business_type==='market'?'오픈마켓':'학원출결'}으로 이동됨`);
+}
 
 // ================================================================
 // WAREHOUSES
@@ -81,9 +145,10 @@ async function getProducts() {
   return data;
 }
 
-async function getProductsWithPrices() {
+async function getProductsWithPrices(bizType) {
+  const bt = bizType || BUSINESS_TYPE;
   const [prodRes, priceRes, stockRes] = await Promise.all([
-    sb.from('products').select('*').order('id'),
+    sb.from('products').select('*').eq('business_type', bt).order('id'),
     sb.from('channel_prices').select('*'),
     sb.from('stock').select('*, warehouses(name)'),
   ]);
@@ -103,9 +168,9 @@ async function getProductsWithPrices() {
   });
 }
 
-async function addProduct({ name, category, cost, unit, type }) {
+async function addProduct({ name, category, cost, unit, type, location, business_type }) {
   const { data, error } = await sb.from('products')
-    .insert({ name, category, cost, unit, type })
+    .insert({ name, category, cost, unit, type, location: location||'', business_type: business_type||BUSINESS_TYPE })
     .select().single();
   if (error) return handleError('품목 추가', error);
 

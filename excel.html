@@ -79,6 +79,10 @@
     <a href="settings.html"  class="nav-link">설정</a>
     <a href="excel.html"     class="nav-link active">엑셀</a>
   </div>
+  <div class="biz-toggle">
+    <button class="biz-tab" data-type="market"  onclick="onBizTab('market')">오픈마켓</button>
+    <button class="biz-tab" data-type="academy" onclick="onBizTab('academy')">학원출결</button>
+  </div>
   <div class="topbar-right"><span id="clock"></span></div>
 </nav>
 <script>
@@ -225,6 +229,7 @@ requireAuth().then(u => { if(u) applyRoleUI(); });
 (function tick(){document.getElementById('clock').textContent=new Date().toLocaleString('ko-KR',{month:'short',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});setTimeout(tick,30000);})();
 
 // 오늘 날짜 기본값
+loadChannels();
 const TODAY = new Date().toISOString().slice(0,10);
 const MONTH_AGO = new Date(Date.now()-30*24*3600*1000).toISOString().slice(0,10);
 document.getElementById('dl-from').value = MONTH_AGO;

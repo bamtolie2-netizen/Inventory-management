@@ -106,6 +106,10 @@ mark { background:#FEF9C3; border-radius:2px; padding:0 1px; }
     <a href="report.html"    class="nav-link">보고서</a>
     <a href="settings.html"  class="nav-link">설정</a>
   </div>
+  <div class="biz-toggle">
+    <button class="biz-tab" data-type="market"  onclick="onBizTab('market')">오픈마켓</button>
+    <button class="biz-tab" data-type="academy" onclick="onBizTab('academy')">학원출결</button>
+  </div>
   <div class="topbar-right"><span id="clock"></span></div>
 </nav>
 <script>
@@ -496,7 +500,7 @@ function escHtml(s) {
   return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-init();
+loadChannels().then(() => init());
 </script>
 <script>requireAuth().then(u=>{ if(u) applyRoleUI(); });</script>
 </body>
