@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="shared.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="supabase.js"></script>
+<script src="auth.js"></script>
 <style>
 .settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 @media(max-width:800px){ .settings-grid { grid-template-columns:1fr; } }
@@ -84,6 +85,39 @@
 <div class="page"><div class="page-inner">
   <div class="page-title">설정</div>
   <div class="page-sub">카테고리 관리 · 채널 정보 · 시스템 현황</div>
+
+  <!-- 사용자 관리 (MASTER 전용) -->
+  <div data-master-only style="margin-bottom:20px">
+    <div class="setting-card">
+      <div class="setting-card-hd">
+        <div>
+          <div class="setting-card-title">사용자 관리</div>
+          <div class="setting-card-sub">초대 발송 · 계정 활성/비활성 · 역할 관리</div>
+        </div>
+        <span style="font-size:12px;padding:3px 10px;border-radius:20px;background:#EDE9FE;color:#5B21B6;font-weight:600">MASTER 전용</span>
+      </div>
+      <div class="setting-card-body">
+        <!-- 초대 발송 -->
+        <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">신규 초대</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input type="email" id="invite-email" placeholder="초대할 이메일 주소" style="flex:1;min-width:200px;font-size:13px;padding:8px 11px">
+            <button class="btn btn-primary" onclick="sendInvite()">초대 발송</button>
+          </div>
+          <div style="font-size:11.5px;color:var(--text3);margin-top:6px">초대 코드가 생성되어 상대방이 login.html에서 가입할 수 있습니다. (유효기간 72시간)</div>
+          <div id="invite-result" style="margin-top:8px;font-size:12.5px;display:none"></div>
+        </div>
+        <!-- 사용자 목록 -->
+        <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">등록된 사용자</div>
+        <div id="user-list"><div style="font-size:13px;color:var(--text3)">로딩 중...</div></div>
+        <!-- 미사용 초대 목록 -->
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">대기 중인 초대</div>
+          <div id="invite-list"><div style="font-size:13px;color:var(--text3)">로딩 중...</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="settings-grid">
 
@@ -357,6 +391,103 @@ async function loadSystemStats() {
 renderChannels();
 loadCats();
 loadSystemStats();
+loadUsers();
+loadInvites();
+
+// ──────────────────────────────────────────────
+// 사용자 관리 (MASTER 전용)
+// ──────────────────────────────────────────────
+async function sendInvite() {
+  const email = document.getElementById('invite-email').value.trim();
+  if (!email) { showToast('이메일을 입력하세요', 'error'); return; }
+  const u = window.currentUser;
+  if (!u || u.role !== 'master') { showToast('권한이 없습니다', 'error'); return; }
+
+  lb(true);
+  // 토큰 생성 후 invitations에 저장
+  const { data, error } = await sb.from('invitations').insert({
+    email,
+    invited_by: u.email,
+  }).select().single();
+  lb(false);
+
+  const resultEl = document.getElementById('invite-result');
+  resultEl.style.display = 'block';
+
+  if (error) {
+    resultEl.style.cssText = 'margin-top:8px;font-size:12.5px;display:block;color:var(--red)';
+    resultEl.textContent = '초대 실패: ' + error.message;
+    return;
+  }
+
+  const inviteUrl = `${location.origin}${location.pathname.replace('settings.html','login.html')}?token=${data.token}`;
+  resultEl.style.cssText = 'margin-top:8px;font-size:12.5px;display:block;background:var(--green-bg);padding:10px 12px;border-radius:8px;border:1px solid var(--green-bd)';
+  resultEl.innerHTML = `
+    <div style="font-weight:600;color:var(--green);margin-bottom:5px">초대 코드 생성됨 (72시간 유효)</div>
+    <div style="font-size:11.5px;color:var(--text2);word-break:break-all;margin-bottom:8px">${inviteUrl}</div>
+    <button onclick="navigator.clipboard.writeText('${inviteUrl}').then(()=>showToast('복사됨'))"
+      style="font-size:11.5px;padding:4px 10px;border:1px solid var(--green-bd);border-radius:6px;cursor:pointer;background:none;color:var(--green)">링크 복사</button>
+  `;
+
+  document.getElementById('invite-email').value = '';
+  await loadInvites();
+}
+
+async function loadUsers() {
+  const { data } = await sb.from('app_users').select('*').order('created_at');
+  const el = document.getElementById('user-list');
+  if (!el) return;
+  if (!data || !data.length) { el.innerHTML = '<div style="font-size:13px;color:var(--text3)">등록된 사용자 없음</div>'; return; }
+
+  el.innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr><th>이름</th><th>이메일</th><th>역할</th><th>마지막 로그인</th><th>상태</th><th></th></tr></thead>
+    <tbody>${data.map(u => `<tr>
+      <td class="fw-bold">${u.name||'-'}</td>
+      <td class="text-muted">${u.email}</td>
+      <td><span class="badge ${u.role==='master'?'badge-purple':'badge-gray'}">${u.role==='master'?'MASTER':'USER'}</span></td>
+      <td class="text-muted text-sm">${u.last_login?new Date(u.last_login).toLocaleDateString('ko-KR'):'없음'}</td>
+      <td><span class="badge ${u.is_active?'badge-ok':'badge-danger'}">${u.is_active?'활성':'비활성'}</span></td>
+      <td class="right" style="display:flex;gap:4px;justify-content:flex-end">
+        <button class="btn btn-sm" onclick="toggleUserActive('${u.id}',${!u.is_active})">${u.is_active?'비활성화':'활성화'}</button>
+      </td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+async function toggleUserActive(id, active) {
+  if (!confirm(`이 계정을 ${active?'활성화':'비활성화'}하시겠습니까?`)) return;
+  lb(true);
+  await sb.from('app_users').update({ is_active: active }).eq('id', id);
+  lb(false);
+  await loadUsers();
+  showToast(active?'활성화됨':'비활성화됨');
+}
+
+async function loadInvites() {
+  const { data } = await sb.from('invitations')
+    .select('*').is('used_at', null).gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false });
+  const el = document.getElementById('invite-list');
+  if (!el) return;
+  if (!data || !data.length) { el.innerHTML = '<div style="font-size:13px;color:var(--text3)">대기 중인 초대 없음</div>'; return; }
+
+  el.innerHTML = data.map(inv => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px">
+      <div style="flex:1"><span class="fw-bold">${inv.email}</span>
+        <span class="text-muted text-sm" style="margin-left:8px">만료: ${new Date(inv.expires_at).toLocaleDateString('ko-KR')}</span>
+      </div>
+      <button class="btn btn-sm btn-danger" onclick="cancelInvite(${inv.id})">취소</button>
+    </div>`).join('');
+}
+
+async function cancelInvite(id) {
+  if (!confirm('초대를 취소하시겠습니까?')) return;
+  lb(true);
+  await sb.from('invitations').delete().eq('id', id);
+  lb(false);
+  await loadInvites();
+  showToast('초대 취소됨');
+}
 </script>
 </body>
 </html>
