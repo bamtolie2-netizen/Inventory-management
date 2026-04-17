@@ -1,19 +1,20 @@
 // ================================================================
 // auth.js - 인증 상태 관리
-// 모든 페이지에서 supabase.js 다음에 로드
 // ================================================================
 
-// 현재 로그인 사용자 정보 (전역)
 window.currentUser = null;
+
+// ── 페이지 즉시 숨김 (인증 전 콘텐츠 노출 방지) ──────────────
+document.documentElement.style.visibility = 'hidden';
 
 // ── 인증 확인 및 페이지 보호 ─────────────────────────────────
 async function requireAuth() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
-    location.href = 'login.html';
+    location.replace('login.html');
     return null;
   }
-  // app_users에서 역할 조회
+
   const { data: user } = await sb.from('app_users')
     .select('*')
     .eq('email', session.user.email)
@@ -21,11 +22,13 @@ async function requireAuth() {
 
   if (!user || !user.is_active) {
     await sb.auth.signOut();
-    location.href = 'login.html?error=inactive';
+    location.replace('login.html?error=inactive');
     return null;
   }
 
   window.currentUser = { ...user, session };
+  // 인증 완료 → 페이지 표시
+  document.documentElement.style.visibility = '';
   renderUserBadge();
   return window.currentUser;
 }
@@ -35,21 +38,21 @@ async function requireMaster() {
   const user = await requireAuth();
   if (!user) return null;
   if (user.role !== 'master') {
+    document.documentElement.style.visibility = '';
     alert('MASTER 권한이 필요합니다.');
-    location.href = 'index.html';
+    location.replace('index.html');
     return null;
   }
   return user;
 }
 
-// ── 네비 우측에 사용자 배지 표시 ────────────────────────────
+// ── 네비 우측 사용자 배지 ────────────────────────────────────
 function renderUserBadge() {
   const u = window.currentUser;
   if (!u) return;
   const right = document.querySelector('.topbar-right');
   if (!right) return;
 
-  // 이미 있으면 업데이트
   let badge = document.getElementById('user-badge');
   if (!badge) {
     badge = document.createElement('div');
@@ -68,18 +71,16 @@ function renderUserBadge() {
   `;
 }
 
-// ── 로그아웃 ──────────────────────────────────────────────────
+// ── 로그아웃 ─────────────────────────────────────────────────
 async function signOut() {
   await sb.auth.signOut();
-  location.href = 'login.html';
+  location.replace('login.html');
 }
 
-// ── MASTER 전용 UI 요소 숨기기 (role=user 일 때) ─────────────
+// ── MASTER 전용 UI 숨김 ───────────────────────────────────────
 function applyRoleUI() {
   const u = window.currentUser;
-  if (!u) return;
-  if (u.role !== 'master') {
-    // master 전용 요소 숨김
+  if (!u || u.role !== 'master') {
     document.querySelectorAll('[data-master-only]').forEach(el => {
       el.style.display = 'none';
     });
