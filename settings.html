@@ -489,5 +489,6 @@ async function cancelInvite(id) {
   showToast('초대 취소됨');
 }
 </script>
+<script>requireAuth().then(u=>{ if(u) applyRoleUI(); });</script>
 </body>
 </html>

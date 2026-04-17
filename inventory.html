@@ -547,5 +547,6 @@ async function delWH(id) {
 loadAll().then(() => renderOverview());
 if(location.hash==='#stocktake') switchTab('stocktake',document.getElementById('tab-stocktake'));
 </script>
+<script>requireAuth().then(u=>{ if(u) applyRoleUI(); });</script>
 </body>
 </html>

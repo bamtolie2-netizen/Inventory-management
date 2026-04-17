@@ -255,5 +255,6 @@ renderDash();
 renderChannelOrders();
 renderRoutine();
 </script>
+<script>requireAuth().then(u=>{ if(u) applyRoleUI(); });</script>
 </body>
 </html>

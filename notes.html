@@ -498,5 +498,6 @@ function escHtml(s) {
 
 init();
 </script>
+<script>requireAuth().then(u=>{ if(u) applyRoleUI(); });</script>
 </body>
 </html>

@@ -974,5 +974,6 @@ window.addEventListener('resize', () => {
   document.querySelectorAll('.product-dropdown.show').forEach(dd => dd.classList.remove('show'));
 });
 </script>
+<script>requireAuth().then(u=>{ if(u) applyRoleUI(); });</script>
 </body>
 </html>

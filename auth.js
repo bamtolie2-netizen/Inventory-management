@@ -6,11 +6,16 @@ window.currentUser = null;
 
 // ── 페이지 즉시 숨김 (인증 전 콘텐츠 노출 방지) ──────────────
 document.documentElement.style.visibility = 'hidden';
+// 안전장치: 3초 안에 인증 완료 안 되면 강제 표시 (무한 흰 화면 방지)
+const _authTimeout = setTimeout(() => {
+  document.documentElement.style.visibility = '';
+}, 3000);
 
 // ── 인증 확인 및 페이지 보호 ─────────────────────────────────
 async function requireAuth() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
+    clearTimeout(_authTimeout);
     location.replace('login.html');
     return null;
   }
@@ -21,6 +26,7 @@ async function requireAuth() {
     .single();
 
   if (!user || !user.is_active) {
+    clearTimeout(_authTimeout);
     await sb.auth.signOut();
     location.replace('login.html?error=inactive');
     return null;
@@ -28,6 +34,7 @@ async function requireAuth() {
 
   window.currentUser = { ...user, session };
   // 인증 완료 → 페이지 표시
+  clearTimeout(_authTimeout);
   document.documentElement.style.visibility = '';
   renderUserBadge();
   return window.currentUser;
