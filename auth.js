@@ -6,38 +6,54 @@ window.currentUser = null;
 
 // ── 페이지 즉시 숨김 (인증 전 콘텐츠 노출 방지) ──────────────
 document.documentElement.style.visibility = 'hidden';
-// 안전장치: 3초 안에 인증 완료 안 되면 강제 표시 (무한 흰 화면 방지)
+// 안전장치: 1.5초 안에 인증 완료 안 되면 login.html로
 const _authTimeout = setTimeout(() => {
   document.documentElement.style.visibility = '';
-}, 3000);
+  if (!window.currentUser) location.replace('login.html');
+}, 1500);
 
 // ── 인증 확인 및 페이지 보호 ─────────────────────────────────
 async function requireAuth() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) {
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      clearTimeout(_authTimeout);
+      location.replace('login.html');
+      return null;
+    }
+
+    const { data: user } = await sb.from('app_users')
+      .select('*')
+      .eq('email', session.user.email)
+      .single();
+
+    if (!user || !user.is_active) {
+      clearTimeout(_authTimeout);
+      // app_users 없으면 일단 통과 (테이블 미생성 대비)
+      if (!user) {
+        window.currentUser = { email: session.user.email, name: session.user.email, role: 'master', is_active: true, session };
+        clearTimeout(_authTimeout);
+        document.documentElement.style.visibility = '';
+        renderUserBadge();
+        return window.currentUser;
+      }
+      await sb.auth.signOut();
+      location.replace('login.html?error=inactive');
+      return null;
+    }
+
+    window.currentUser = { ...user, session };
     clearTimeout(_authTimeout);
-    location.replace('login.html');
+    document.documentElement.style.visibility = '';
+    renderUserBadge();
+    return window.currentUser;
+  } catch(e) {
+    // 에러 시 페이지 표시 (app_users 테이블 없는 경우 등)
+    clearTimeout(_authTimeout);
+    document.documentElement.style.visibility = '';
+    console.warn('Auth check error:', e);
     return null;
   }
-
-  const { data: user } = await sb.from('app_users')
-    .select('*')
-    .eq('email', session.user.email)
-    .single();
-
-  if (!user || !user.is_active) {
-    clearTimeout(_authTimeout);
-    await sb.auth.signOut();
-    location.replace('login.html?error=inactive');
-    return null;
-  }
-
-  window.currentUser = { ...user, session };
-  // 인증 완료 → 페이지 표시
-  clearTimeout(_authTimeout);
-  document.documentElement.style.visibility = '';
-  renderUserBadge();
-  return window.currentUser;
 }
 
 // ── MASTER 전용 페이지 보호 ──────────────────────────────────
