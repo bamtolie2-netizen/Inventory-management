@@ -3,8 +3,8 @@
 // !! 아래 두 값을 본인 Supabase 프로젝트 값으로 교체하세요 !!
 // ================================================================
 
-const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+const SUPABASE_URL = 'https://qqisudyfktpnakldgrls.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxaXN1ZHlma3RwbmFrbGRncmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTMxOTMsImV4cCI6MjA5MTAyOTE5M30.MWir7d_xbGU2ptnddl4JCHMBudZH1LK9kmOhBl-4dSA';
 
 // Supabase JS CDN 클라이언트 (index.html 등에서 script 태그로 로드)
 // <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
