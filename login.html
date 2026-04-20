@@ -151,23 +151,8 @@ async function doLogin() {
     return;
   }
 
-  // app_users 확인
-  const { data: user } = await sb.from('app_users').select('*').eq('email', email).single();
-  if (!user) {
-    await sb.auth.signOut();
-    showMsg('등록되지 않은 계정입니다. MASTER에게 문의하세요.', 'error');
-    return;
-  }
-  if (!user.is_active) {
-    await sb.auth.signOut();
-    showMsg('비활성화된 계정입니다. 관리자에게 문의하세요.', 'error');
-    return;
-  }
-
-  // last_login 업데이트
-  await sb.from('app_users').update({ last_login: new Date().toISOString() }).eq('email', email);
-
-  location.href = 'index.html';
+  // 로그인 성공 → 바로 이동
+  location.replace('index.html');
 }
 
 // ── 초대 토큰 확인 ────────────────────────────────────────────

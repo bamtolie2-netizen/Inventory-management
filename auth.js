@@ -1,81 +1,52 @@
 // ================================================================
-// auth.js - 인증 상태 관리
+// auth.js - 인증 상태 관리 (간소화 버전)
 // ================================================================
 
 window.currentUser = null;
 
-// ── 페이지 즉시 숨김 (인증 전 콘텐츠 노출 방지) ──────────────
+// 페이지 즉시 숨김
 document.documentElement.style.visibility = 'hidden';
-// 안전장치: 1.5초 안에 인증 완료 안 되면 login.html로
+
+// 안전장치: 2초 후 강제 표시
 const _authTimeout = setTimeout(() => {
   document.documentElement.style.visibility = '';
-  if (!window.currentUser) location.replace('login.html');
-}, 1500);
+}, 2000);
 
-// ── 인증 확인 및 페이지 보호 ─────────────────────────────────
 async function requireAuth() {
   try {
     const { data: { session } } = await sb.auth.getSession();
+    clearTimeout(_authTimeout);
     if (!session) {
-      clearTimeout(_authTimeout);
       location.replace('login.html');
       return null;
     }
-
-    const { data: user } = await sb.from('app_users')
-      .select('*')
-      .eq('email', session.user.email)
-      .single();
-
-    if (!user || !user.is_active) {
-      clearTimeout(_authTimeout);
-      // app_users 없으면 일단 통과 (테이블 미생성 대비)
-      if (!user) {
-        window.currentUser = { email: session.user.email, name: session.user.email, role: 'master', is_active: true, session };
-        clearTimeout(_authTimeout);
-        document.documentElement.style.visibility = '';
-        renderUserBadge();
-        return window.currentUser;
-      }
-      await sb.auth.signOut();
-      location.replace('login.html?error=inactive');
-      return null;
-    }
-
-    window.currentUser = { ...user, session };
-    clearTimeout(_authTimeout);
+    // app_users 체크 없이 세션만으로 통과
+    window.currentUser = {
+      email: session.user.email,
+      name:  session.user.email.split('@')[0],
+      role:  'master',
+      is_active: true,
+      session
+    };
     document.documentElement.style.visibility = '';
     renderUserBadge();
     return window.currentUser;
   } catch(e) {
-    // 에러 시 페이지 표시 (app_users 테이블 없는 경우 등)
     clearTimeout(_authTimeout);
     document.documentElement.style.visibility = '';
-    console.warn('Auth check error:', e);
     return null;
   }
 }
 
-// ── MASTER 전용 페이지 보호 ──────────────────────────────────
 async function requireMaster() {
-  const user = await requireAuth();
-  if (!user) return null;
-  if (user.role !== 'master') {
-    document.documentElement.style.visibility = '';
-    alert('MASTER 권한이 필요합니다.');
-    location.replace('index.html');
-    return null;
-  }
-  return user;
+  return await requireAuth();
 }
 
-// ── 네비 우측 사용자 배지 ────────────────────────────────────
 function renderUserBadge() {
   const u = window.currentUser;
   if (!u) return;
   const right = document.querySelector('.topbar-right');
   if (!right) return;
-
   let badge = document.getElementById('user-badge');
   if (!badge) {
     badge = document.createElement('div');
@@ -83,29 +54,15 @@ function renderUserBadge() {
     badge.style.cssText = 'display:flex;align-items:center;gap:8px';
     right.insertBefore(badge, right.firstChild);
   }
-
   badge.innerHTML = `
-    <span style="font-size:12px;color:var(--text2)">${u.name||u.email}</span>
-    ${u.role==='master'
-      ? '<span style="font-size:10px;padding:2px 7px;border-radius:20px;background:#EDE9FE;color:#5B21B6;font-weight:600">MASTER</span>'
-      : '<span style="font-size:10px;padding:2px 7px;border-radius:20px;background:var(--bg2);color:var(--text3);font-weight:600">USER</span>'
-    }
+    <span style="font-size:12px;color:var(--text2)">${u.name}</span>
     <button onclick="signOut()" style="font-size:11.5px;padding:4px 10px;border:1px solid var(--border2);border-radius:6px;cursor:pointer;background:none;color:var(--text2)">로그아웃</button>
   `;
 }
 
-// ── 로그아웃 ─────────────────────────────────────────────────
 async function signOut() {
   await sb.auth.signOut();
   location.replace('login.html');
 }
 
-// ── MASTER 전용 UI 숨김 ───────────────────────────────────────
-function applyRoleUI() {
-  const u = window.currentUser;
-  if (!u || u.role !== 'master') {
-    document.querySelectorAll('[data-master-only]').forEach(el => {
-      el.style.display = 'none';
-    });
-  }
-}
+function applyRoleUI() {}
